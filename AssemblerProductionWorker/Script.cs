@@ -15,6 +15,7 @@
 List<IMyCargoContainer> containersList = new List<IMyCargoContainer>();
 List<IMyAssembler> assemblers = new List<IMyAssembler>();
 List<LearnedBlueprint> lBlueprints = new List<LearnedBlueprint>();
+List<IMyTextPanel> lcdPanelList = new List<IMyTextPanel>();
 
 // Dictionary
 Dictionary<string, int> lcdAssemblerStreamData = new Dictionary<string, int>();
@@ -22,10 +23,10 @@ Dictionary<MyDefinitionId, int> queueItems = new Dictionary<MyDefinitionId, int>
 Dictionary<string, int> currentItems = new Dictionary<string, int>();
 
 // variables
-List<IMyTextPanel> lcdPanelList = new List<IMyTextPanel>();
+int runtimeLagger = 0;
 
 public Program(){
-    Runtime.UpdateFrequency = UpdateFrequency.Update10;
+    Runtime.UpdateFrequency = UpdateFrequency.Update100;
     GridTerminalSystem.GetBlocksOfType(assemblers);
     GridTerminalSystem.GetBlocksOfType(containersList);
     GridTerminalSystem.GetBlocksOfType(lcdPanelList);
@@ -34,13 +35,22 @@ public Program(){
 }
 
 public void Main(string argument, UpdateType updateSource){
-    //LCD handleout
-    ReadLCDData(lcdPanelList.Find(panel => panel.CustomName == "LCD Assembler Manager Main"), lcdAssemblerStreamData);
-    SaveLCDData(lcdPanelList.Find(panel => panel.CustomName == "LCD Assembler Manager Main"), lcdAssemblerStreamData);
-    
-    // Assembler handleout
-    MainAssembly();
-    //QueueListPrint();
+
+    // RuntimeLag + 5sec
+    if(runtimeLagger < 5)
+    {
+        runtimeLagger++;
+    }
+    else{
+        runtimeLagger = 0;
+        //LCD handleout
+        ReadLCDData(lcdPanelList.Find(panel => panel.CustomName == "LCD Assembler Manager Main"), lcdAssemblerStreamData);
+        SaveLCDData(lcdPanelList.Find(panel => panel.CustomName == "LCD Assembler Manager Main"), lcdAssemblerStreamData);
+
+        // Assembler handleout
+        MainAssembly();
+        //QueueListPrint();
+    }
 }
 
 // Assembler handling
