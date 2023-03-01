@@ -24,32 +24,121 @@ Dictionary<string, int> currentItems = new Dictionary<string, int>();
 
 // variables
 int runtimeLagger = 0;
+int runtimeLaggerDelay = 5; // Default 5 seconds Non-Active 20 seconds -> This works as limiter for resource drainer 
+                            // ( if there was an activity in the 5 sec timer it will be left at 5 second interval if not then it 
+                            // will switch to 20 sec interval of checking)
+Logger _logger;
 
 public Program(){
     Runtime.UpdateFrequency = UpdateFrequency.Update100;
+    _logger = new Logger();
     GridTerminalSystem.GetBlocksOfType(assemblers);
     GridTerminalSystem.GetBlocksOfType(containersList);
     GridTerminalSystem.GetBlocksOfType(lcdPanelList);
+
+    // Move to an method lazy mate...
+    assemblers = assemblers.Where(assembler => assembler.CustomName.Contains("Assembler")).ToList();
+
     LoadDataStream();
     LoadLearnedBlueprints();
 }
 
 public void Main(string argument, UpdateType updateSource){
-
     // RuntimeLag + 5sec
-    if(runtimeLagger < 5)
+    if(runtimeLagger < runtimeLaggerDelay)
     {
         runtimeLagger++;
+        //Echo("Main method instructions (runtimeLagger): " + Runtime.CurrentInstructionCount.ToString());
     }
     else{
         runtimeLagger = 0;
+        _logger.SetRuns(_logger.GetRuns() + 1);
         //LCD handleout
         ReadLCDData(lcdPanelList.Find(panel => panel.CustomName == "LCD Assembler Manager Main"), lcdAssemblerStreamData);
         SaveLCDData(lcdPanelList.Find(panel => panel.CustomName == "LCD Assembler Manager Main"), lcdAssemblerStreamData);
 
+        // Search the containers for items
+        ManageCurrentItems();
+
         // Assembler handleout
-        MainAssembly();
+        try{
+            MainAssembly();
+        }
+        catch (Exception ex)
+        {
+            Echo("Error: " + ex.ToString());
+        }
+
+        // Logs
         //QueueListPrint();
+        _logger.SetRuntime(Runtime.TimeSinceLastRun);
+        Echo(Runtime.MaxInstructionCount.ToString());
+        Echo("Main method instructions (Main Loop): " + Runtime.CurrentInstructionCount.ToString());
+        Echo(_logger.GetRuntime().ToString());
+        Echo("Script runs: " + _logger.GetRuns());
+        //_logger.GetLoggerLog().ForEach(log => Echo(log.LogType + " : " + log.LogMsg));
+    }
+}
+
+
+
+// Logger
+public class Log{
+    string logType;
+    string logMsg;
+
+    public Log(string logtype, string logmsg){
+        logType = logtype;
+        logMsg = logmsg;
+    }
+
+    public string LogType{
+        get { return this.logType; }
+        set { 
+            if(String.IsNullOrEmpty(value))return;
+            else this.logType = value;
+        }
+    }
+
+    public string LogMsg{
+        get { return this.logMsg; }
+        set {
+            if(String.IsNullOrEmpty(value)) return;
+            else this.logMsg = value;
+        }
+    }
+}
+
+public class Logger{
+    private List<Log> loggerLog = new List<Log>();
+    private TimeSpan runtime = TimeSpan.Zero;
+    private int runs = 0;
+
+    public Logger(){
+    } 
+
+    public void AddLogItem(Log log){
+        this.loggerLog.Add(log);
+    }
+
+    public List<Log> GetLoggerLog(){
+        return this.loggerLog;
+    }
+
+    public TimeSpan GetRuntime(){
+        return this.runtime;
+    }
+
+    public void SetRuntime(TimeSpan value){
+        this.runtime = value;
+    }
+
+    public void SetRuns(int value){
+        this.runs = value;
+    }
+
+    public int GetRuns(){
+        return this.runs;
     }
 }
 
@@ -65,10 +154,26 @@ void MainAssembly(){
         LearnBlueprint(assembler, lBlueprints);
         if(assembler.IsQueueEmpty)
         {
+            if(queueItems.Count == 0){
+                runtimeLaggerDelay = 20;
+                return;
+            }
             foreach(KeyValuePair<MyDefinitionId, int> pair in queueItems){
                 assembler.AddQueueItem(pair.Key, (decimal)pair.Value);
             }
+            //Echo("Main method instructions (Queue Empty - Yes): " + Runtime.CurrentInstructionCount.ToString());
         }else{
+            //
+            /// Make method for checking and refreshing Assembler queue
+            //
+            if(assembler.IsProducing)
+            {
+                runtimeLaggerDelay = 5;
+            }
+            else{
+                runtimeLaggerDelay = 20;
+            }
+
             var itemsQueued = new List<MyProductionItem>();
 
             assembler.GetQueue(itemsQueued);
@@ -83,12 +188,16 @@ void MainAssembly(){
                     assembler.ClearQueue();
                 }
                 else if(currentItems[itemsQueued[0].BlueprintId.SubtypeId.ToString()] > lcdAssemblerStreamData[itemsQueued[0].BlueprintId.SubtypeId. ToString()]){
+                    //_logger.AddLogItem(new Log("Queue removal" ,"Removed " + queueItems.First().Key.ToString() + " from queue and assemblers"));
                     assembler.ClearQueue();
+                    if(queueItems.Count() <= 0)
+                        queueItems.Remove(queueItems.First().Key);
                 }
                 else{
                     //Echo("None Hit!");
                 }
             }
+            //Echo("Main method instructions (Queue Empty - False): " + Runtime.CurrentInstructionCount.ToString());
         }
         ClearAssemblyLine(assembler);
     }
@@ -101,7 +210,7 @@ void ClearAssemblyLine(IMyAssembler assembler)
     assembler.GetInventory(1).GetItems(items);
 
     items.ForEach(item => assembler.GetInventory(1).TransferItemTo(containersList.Find(containerOut => containerOut.GetInventory(0).CanItemsBeAdded(item.Amount, item.Type)).GetInventory(0), 0, null, true, item.Amount));
-    
+    //Echo("Clear Assembly Line method instructions: " + Runtime.CurrentInstructionCount.ToString());
 }
 
 void ManageQueueAssembly(){
@@ -109,12 +218,10 @@ void ManageQueueAssembly(){
     foreach (KeyValuePair<string, int> pair in lcdAssemblerStreamData){
 
         // First check difference between currentAmount and desiredAmmount
-        var currentAmount = GetItemAmountInInventory(pair.Key);
-
-        if(currentItems.ContainsKey(pair.Key)){
-            currentItems[pair.Key] = currentAmount;
-        }else{
-            currentItems.Add(pair.Key, currentAmount);
+        var currentAmount = 0;
+        if(!currentItems.TryGetValue(pair.Key, out currentAmount))
+        {
+            currentAmount = 0;
         }
 
         int queueAmount = 0;
@@ -129,15 +236,25 @@ void ManageQueueAssembly(){
                 SubtypeId = pair.Key
             };
 
-            var itemDeffId = GetBlueprintBack(_bp); 
-            if(queueItems.ContainsKey(itemDeffId)){
-                queueItems[itemDeffId] = queueAmount/assemblers.Count;
-            }
-            else{
-                queueItems.Add(itemDeffId, pair.Value/assemblers.Count);
-            }
+            var itemDeffId = GetBlueprintBack(_bp);
+            
+            if(assemblers.Count != 0){
+                if(assemblers[0].CanUseBlueprint(itemDeffId)){
+                    //Echo("Item: " + pair.Key + " Usage: True!");
+                    if(queueItems.ContainsKey(itemDeffId)){
+                        queueItems[itemDeffId] = queueAmount/assemblers.Count;
+                    }
+                    else{
+                        queueItems.Add(itemDeffId, pair.Value/assemblers.Count);
+                    }
+                }
+                else{
+                    if(queueItems.ContainsKey(itemDeffId)) queueItems.Remove(itemDeffId);
+                }
+            } 
         }
     }
+    //Echo("Manage Queue Assembly method instructions: " + Runtime.CurrentInstructionCount.ToString());
 }
 
 void QueueListPrint(){
@@ -173,6 +290,7 @@ public void ReadLCDData(IMyTextPanel lcdPanel, Dictionary<string, int> dataStrea
             }
         }
     }
+    //Echo("Read LCD Data method instructions: " + Runtime.CurrentInstructionCount.ToString());
 }
 
 public void SaveLCDData(IMyTextPanel lcdPanel, Dictionary<string, int> dataStream){
@@ -190,6 +308,7 @@ public void SaveLCDData(IMyTextPanel lcdPanel, Dictionary<string, int> dataStrea
         lcdData += pair.Key + ":" + currentAmount.ToString()  + "/" + pair.Value.ToString() + "\n";
     }
     lcdPanel.WritePublicText(lcdData);
+    //Echo("Save LCD Data method instructions: " + Runtime.CurrentInstructionCount.ToString());
 }
 
 void LoadDataStream(){
@@ -208,29 +327,30 @@ void LoadDataStream(){
             }
         });
     });
+    Echo("Load Data Stream method instructions: " + Runtime.CurrentInstructionCount.ToString());
 }
 
-// Used for Getting the total current amount of given item
-public int GetItemAmountInInventory(string itemName)
-{
-    int amount = 0;
-
+public void ManageCurrentItems(){
+    currentItems.Clear();
     containersList.ForEach(container => {
-
-        var containerInventory = container.GetInventory(0);
-
         var items = new List<MyInventoryItem>();
-
-        containerInventory.GetItems(items);
+        container.GetInventory(0).GetItems(items);
+        if(items.Count == 0) return;
 
         items.ForEach(item => {
-            if(item.Type.TypeId == "MyObjectBuilder_Component" && item.Type.SubtypeId == itemName)
+            if(item.Type.TypeId == "MyObjectBuilder_Component")
             {
-                amount += (int) item.Amount;
+                if(currentItems.ContainsKey(item.Type.SubtypeId)){
+                    currentItems[item.Type.SubtypeId] += (int) item.Amount;
+                }
+                else{
+                    currentItems.Add(item.Type.SubtypeId, (int) item.Amount);
+                }
+                /// Find if clearing the array and then adding items is faster then just rewriting the value
             }
         });
     });
-    return amount;
+    //Echo("Manage Current Items method instructions: " + Runtime.CurrentInstructionCount.ToString());
 }
 
 // Blueprint handling class
@@ -268,14 +388,15 @@ public void LearnBlueprint(IMyAssembler assembler, List<LearnedBlueprint> learne
         };
 
         learnedBlueprints.Add(learnedBlueprint);
-    }
 
-    var data = "";
-    foreach (var bp in learnedBlueprints)
-    {
-        data += bp.TypeId + ";" + bp.SubtypeId + "\n";
+        var data = "";
+        foreach (var bp in learnedBlueprints)
+        {
+            data += bp.TypeId + ";" + bp.SubtypeId + "\n";
+        }
+        Me.CustomData = data;
     }
-    Me.CustomData = data;
+    //Echo("Learn Blueprint method instructions: " + Runtime.CurrentInstructionCount.ToString());
 }
 
 public void LoadLearnedBlueprints()
@@ -319,4 +440,5 @@ public void LoadLearnedBlueprints()
         };
         lBlueprints.Add(learnedBlueprint);
     }
+    //Echo("Load Learned Blueprints method instructions: " + Runtime.CurrentInstructionCount.ToString());
 }
