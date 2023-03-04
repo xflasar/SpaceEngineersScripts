@@ -32,9 +32,9 @@ Logger _logger;
 public Program(){
     Runtime.UpdateFrequency = UpdateFrequency.Update100;
     _logger = new Logger();
-    GridTerminalSystem.GetBlocksOfType(assemblers);
-    GridTerminalSystem.GetBlocksOfType(containersList);
-    GridTerminalSystem.GetBlocksOfType(lcdPanelList);
+    GridTerminalSystem.GetBlocksOfType(assemblers, b => b.CubeGrid == Me.CubeGrid);
+    GridTerminalSystem.GetBlocksOfType(containersList, b => b.CubeGrid == Me.CubeGrid);
+    GridTerminalSystem.GetBlocksOfType(lcdPanelList, b => b.CubeGrid == Me.CubeGrid);
 
     // Move to an method lazy mate...
     assemblers = assemblers.Where(assembler => assembler.CustomName.Contains("Assembler")).ToList();
@@ -187,10 +187,10 @@ void MainAssembly(){
                 else if(itemsQueued[0].Amount >= (queueItems[itemsQueued[0].BlueprintId] + 150)){
                     assembler.ClearQueue();
                 }
-                else if(currentItems[itemsQueued[0].BlueprintId.SubtypeId.ToString()] > lcdAssemblerStreamData[itemsQueued[0].BlueprintId.SubtypeId. ToString()]){
+                else if(currentItems[itemsQueued[0].BlueprintId.SubtypeId.ToString()] > lcdAssemblerStreamData[itemsQueued[0].BlueprintId.SubtypeId.ToString()]){
                     //_logger.AddLogItem(new Log("Queue removal" ,"Removed " + queueItems.First().Key.ToString() + " from queue and assemblers"));
                     assembler.ClearQueue();
-                    if(queueItems.Count() <= 0)
+                    if(queueItems.Count <= 0)
                         queueItems.Remove(queueItems.First().Key);
                 }
                 else{
