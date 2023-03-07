@@ -10,8 +10,15 @@ List<IMyCargoContainer> refineryMatsContainersList = new List<IMyCargoContainer>
 // Variables
 int programDelay = 10;
 int programDelayCounter = 0;
-int programDelayMatrix = 30;
+int programDelayMatrix = 7;
 int programDelayMatrixCounter = 0;
+int DilithiumMatrixMade = 0;
+int DilithiumMatrixAllTimeCountTransfered = 0;
+int IntermixAllTimeCountTransfered = 0;
+int DilithiumMatrixAllTimeCountTransferedMoney = 0;
+int IntermixAllTimeCountTransferedMoney = 0;
+TimeSpan TimeSinceFirstRun = TimeSpan.Zero;
+
 
 Program()
 {
@@ -28,10 +35,12 @@ Program()
         //return false;
     });
     FindAssignedContainers();
-    Echo("FindAssignedContainers - Instruction current: " + Runtime.CurrentInstructionCount.ToString());
+    //Echo("FindAssignedContainers - Instruction current: " + Runtime.CurrentInstructionCount.ToString());
+    LoadDataFromCD();
 }
 
 void Main(string argument){
+    TimeSinceFirstRun += Runtime.TimeSinceLastRun;
     try
     {
         if(programDelayMatrixCounter < programDelayMatrix){
@@ -54,11 +63,12 @@ void Main(string argument){
         {
             programDelayCounter = 0;
             FillDeutProcessors();
-            Echo("FillDeutProcessors - Instruction current: " + Runtime.CurrentInstructionCount.ToString());
+            //Echo("FillDeutProcessors - Instruction current: " + Runtime.CurrentInstructionCount.ToString());
             ClearDeutProcessors();
-            Echo("ClearDeutProcessors - Instruction current: " + Runtime.CurrentInstructionCount.ToString());
+            SaveToCD();
+            //Echo("ClearDeutProcessors - Instruction current: " + Runtime.CurrentInstructionCount.ToString());
             RenameCargoContainer();
-            Echo("RenameCargoContainer - Instruction current: " + Runtime.CurrentInstructionCount.ToString());
+            //Echo("RenameCargoContainer - Instruction current: " + Runtime.CurrentInstructionCount.ToString());
         }
     }
     catch
@@ -66,6 +76,12 @@ void Main(string argument){
         Echo("Script Failed to complete!");
     }
     Echo("Main End - Instruction current: " + Runtime.CurrentInstructionCount.ToString());
+    Echo("Matrixes made in 7 seconds: " + DilithiumMatrixMade);
+    Echo("Matrixes transfered total: " + DilithiumMatrixAllTimeCountTransfered);
+    Echo("Money made for Matrixes: " + DilithiumMatrixAllTimeCountTransferedMoney);
+    Echo("Intermix made and transfered: " + IntermixAllTimeCountTransfered);
+    Echo("Money made for Intermix: " + IntermixAllTimeCountTransferedMoney);
+    Echo("TimeSinceFirstRun: " + TimeSinceFirstRun);
 }
 
 void ClearDeutProcessors(){
@@ -74,11 +90,13 @@ void ClearDeutProcessors(){
         var refineryOutputItems = new List<MyInventoryItem>();
         deutRefinery.GetInventory(1).GetItems(refineryOutputItems);
         if(refineryOutputItems.Count == 0) return;
+        IntermixAllTimeCountTransfered = (int)refineryOutputItems[0].Amount;
+        IntermixAllTimeCountTransferedMoney = IntermixAllTimeCountTransfered * 1494;
 
         deutRefinery.GetInventory(1).TransferItemTo(deutIntermixContainersList.Find(cont => cont.GetInventory(0).CanItemsBeAdded(refineryOutputItems[0].Amount, refineryOutputItems[0].Type)).GetInventory(0), 0, null, true, refineryOutputItems[0].Amount);
     });
 }
-
+int DilithiumMatrixAmountCur = 0;
 IMyCargoContainer FindItemInRefineryMaterialsContainer(string itemName, out int pos){
     int position = 0;
     IMyCargoContainer carg = refineryMatsContainersList.Find(refMats =>
@@ -87,10 +105,10 @@ IMyCargoContainer FindItemInRefineryMaterialsContainer(string itemName, out int 
         refMats.GetInventory(0).GetItems(refMatsItems);
 
         return refMatsItems.Any(refMatsItem => {
-            if(refMatsItem.Type.SubtypeId.Contains(itemName)) {
+            if(refMatsItem.Type.SubtypeId == itemName) {
                 position = refMatsItems.IndexOf(refMatsItem);
+                if(itemName == "DilithiumMatrix") DilithiumMatrixAmountCur = (int)refMatsItem.Amount;
                 return true;
-
             }
             return false;
         });
@@ -113,6 +131,7 @@ bool TransferMaterialsIntoProcessor(IMyRefinery refinery, string type, VRage.MyF
 }
 
 void TransferMatrixResourceToRefMatsCargo(){
+    DilithiumMatrixMade = 0;
     allContainers.ForEach(container =>
     {
         int pos = -1;
@@ -122,6 +141,9 @@ void TransferMatrixResourceToRefMatsCargo(){
 
         var itemFound = items.Find(item => item.Type.SubtypeId == "DilithiumMatrix");
         pos = items.IndexOf(itemFound);
+        DilithiumMatrixMade += (int)itemFound.Amount;
+        DilithiumMatrixAllTimeCountTransfered += (int)itemFound.Amount;
+        DilithiumMatrixAllTimeCountTransferedMoney = DilithiumMatrixAllTimeCountTransfered * 180;
 
         // Now we transfer all of it into one of Refinery Materials cargo container
         refineryMatsContainersList.Find(containerR => containerR.GetInventory(0).CanItemsBeAdded(itemFound.Amount, itemFound.Type)).GetInventory(0).TransferItemFrom(container.GetInventory(), pos, null, true, itemFound.Amount);
@@ -132,25 +154,43 @@ void BalanceProcessorInput(IMyRefinery refin, MyInventoryItem item){
     IMyCargoContainer carg = refineryMatsContainersList.Find(container => container.GetInventory(0).CanItemsBeAdded(item.Amount, item.Type));
     if(carg == null) RenameCargoContainer();
 
-    refin.GetInventory(0).TransferItemTo(carg.GetInventory(0), 0, null, true, item.Amount);
+    var items = new List<MyInventoryItem>();
+    refin.GetInventory(0).GetItems(items);
+    refin.GetInventory(0).TransferItemTo(carg.GetInventory(0), items.IndexOf(item), null, true, item.Amount);
 }
 
 void FillDeutProcessors(){
+    //Echo("Fill Run! " + DilithiumMatrixAmountCur);
     int refCount = 0;
-    deutRefList.ForEach(deutRefinery =>
+    var pos = 0;
+    var cTemp = FindItemInRefineryMaterialsContainer("DilithiumMatrix", out pos);
+    List<IMyRefinery> enabledRefineries = new List<IMyRefinery>();
+    for (int i = 1; i < (deutRefList.Count + 1); i++)
     {
+        if (((int)DilithiumMatrixAmountCur / i) < 5)
+        {
+            break;
+        }
+        enabledRefineries.Add(deutRefList[i-1]);
+        //Echo("Num of Ref: " + enabledRefineries.Count);
+    }
+    //Echo("Num of Ref: " + enabledRefineries.Count);
+    enabledRefineries.ForEach(deutRefinery =>
+    {
+        //Echo("Passed Refinery!");
+
         var refineryInputItems = new List<MyInventoryItem>();
         deutRefinery.GetInventory(0).GetItems(refineryInputItems);
-
+        
         bool dilMatrixPresent = false;
         bool deuteriumPresent = false;
         bool antiDeuteriumPresent = false;
 
-        VRage.MyFixedPoint dilMatrixCount = 2000;
+        VRage.MyFixedPoint dilMatrixCount = 500*deutRefList.Count;
         VRage.MyFixedPoint deuteriumCount = 2000;
         VRage.MyFixedPoint antiDeuteriumCount = 2000;
 
-        if (refineryInputItems.Count < 3)
+        if (refineryInputItems.Count <= 3)
         {
             refineryInputItems.ForEach(refineryInputItem =>
             {
@@ -171,7 +211,7 @@ void FillDeutProcessors(){
                 {
                     dilMatrixPresent = true;
                     
-                    if (refineryInputItem.Amount > 2000){
+                    if (refineryInputItem.Amount > 500){
                         BalanceProcessorInput(deutRefinery, refineryInputItem);
                         //Echo("Balancing Refinery input out of DilithiumMatrix!");
                     }
@@ -190,13 +230,17 @@ void FillDeutProcessors(){
                 }
             });
             if(!dilMatrixPresent){
-                if(TransferMaterialsIntoProcessor(deutRefinery, "DilithiumMatrix", (VRage.MyFixedPoint)((int)dilMatrixCount/deutRefList.Count))){}
-                //Echo("Transfered " + 2000 + "of DilithiumMatrix to " + deutRefinery.CustomName);
+                if(TransferMaterialsIntoProcessor(deutRefinery, "DilithiumMatrix", (VRage.MyFixedPoint)((int)DilithiumMatrixAmountCur/enabledRefineries.Count))){
+                    //Echo("Transfered " + DilithiumMatrixAmountCur+ "/" + (int)DilithiumMatrixAmountCur/deutRefList.Count + "of DilithiumMatrix to " + deutRefinery.CustomName);
+                }
+                //
             }
 
             if(!deuteriumPresent){
-                if(TransferMaterialsIntoProcessor(deutRefinery, "Deuterium", deuteriumCount)){}
-                //Echo("Transfered " + 2000 + "of Deuterium to " + deutRefinery.CustomName);
+                if(TransferMaterialsIntoProcessor(deutRefinery, "Deuterium", deuteriumCount)){
+                    //Echo("Transfered " + 2000 + "of Deuterium to " + deutRefinery.CustomName);
+                }
+                
             }
                 
             if(!antiDeuteriumPresent){
@@ -283,4 +327,48 @@ void RenameCargoContainer(){
             }
         }
     });
+}
+void SaveToCD(){
+    var data = "";
+    data = "DilithiumMatrixAllTimeCountTransfered:" + DilithiumMatrixAllTimeCountTransfered + "\n" + "DilithiumMatrixAllTimeCountTransferedMoney:" + DilithiumMatrixAllTimeCountTransferedMoney + "\n" + "IntermixAllTimeCountTransfered:" + IntermixAllTimeCountTransfered + "\n" + "IntermixAllTimeCountTransferedMoney:" + IntermixAllTimeCountTransferedMoney + "\n" + "TimeSinceFirstRun" + TimeSinceFirstRun;
+    Me.CustomData = data;
+}
+void LoadDataFromCD(){
+    var data = Me.CustomData;
+    if (string.IsNullOrEmpty(data))
+    {
+        return;
+    }
+
+    var lines = data.Split('\n');
+    foreach (var line in lines)
+    {
+        if (string.IsNullOrEmpty(line))
+        {
+            continue;
+        }
+
+        var values = line.Split(':');
+        if (values.Length != 2)
+        {
+            continue;
+        }
+
+        if(values[0] == "DilithiumMatrixAllTimeCountTransfered"){
+            DilithiumMatrixAllTimeCountTransfered = int.Parse(values[1]);
+        }
+        else if(values[0] == "DilithiumMatrixAllTimeCountTransferedMoney"){
+            DilithiumMatrixAllTimeCountTransferedMoney = int.Parse(values[1]);
+        }
+        else if (values[0] == "IntermixAllTimeCountTransfered"){
+            IntermixAllTimeCountTransfered = int.Parse(values[1]);
+        }
+        else if (values[0] == "IntermixAllTimeCountTransferedMoney"){
+            IntermixAllTimeCountTransferedMoney = int.Parse(values[1]);
+        }
+        else if( values[0] == "TimeSinceFirstRun")
+        {
+            TimeSinceFirstRun = TimeSpan.Parse(values[1]);
+        }
+    }
 }
