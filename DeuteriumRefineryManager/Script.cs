@@ -18,6 +18,10 @@ int IntermixAllTimeCountTransfered = 0;
 int DilithiumMatrixAllTimeCountTransferedMoney = 0;
 int IntermixAllTimeCountTransferedMoney = 0;
 TimeSpan TimeSinceFirstRun = TimeSpan.Zero;
+TimeSpan TimeActiveTotal = TimeSpan.Zero;
+TimeSpan lastSaveTime = TimeSpan.Zero;
+int DeuteriumUsageTotal = 0;
+int AntiDeuteriumUsageTotal = 0;
 
 
 Program()
@@ -65,15 +69,15 @@ void Main(string argument){
             FillDeutProcessors();
             //Echo("FillDeutProcessors - Instruction current: " + Runtime.CurrentInstructionCount.ToString());
             ClearDeutProcessors();
-            SaveToCD();
             //Echo("ClearDeutProcessors - Instruction current: " + Runtime.CurrentInstructionCount.ToString());
             RenameCargoContainer();
             //Echo("RenameCargoContainer - Instruction current: " + Runtime.CurrentInstructionCount.ToString());
+            SaveToCD();
         }
     }
-    catch
+    catch (Exception e)
     {
-        Echo("Script Failed to complete!");
+        Echo("Script Failed to complete!" + e);
     }
     Echo("Main End - Instruction current: " + Runtime.CurrentInstructionCount.ToString());
     Echo("Matrixes made in 7 seconds: " + DilithiumMatrixMade);
@@ -81,7 +85,10 @@ void Main(string argument){
     Echo("Money made for Matrixes: " + DilithiumMatrixAllTimeCountTransferedMoney);
     Echo("Intermix made and transfered: " + IntermixAllTimeCountTransfered);
     Echo("Money made for Intermix: " + IntermixAllTimeCountTransferedMoney);
+    Echo("Deuterium used: " + DeuteriumUsageTotal);
+    Echo("Anti-Deuterium used: " + AntiDeuteriumUsageTotal);
     Echo("TimeSinceFirstRun: " + TimeSinceFirstRun);
+    Echo("TimeActiveTotal: " + TimeActiveTotal);
 }
 
 void ClearDeutProcessors(){
@@ -90,7 +97,7 @@ void ClearDeutProcessors(){
         var refineryOutputItems = new List<MyInventoryItem>();
         deutRefinery.GetInventory(1).GetItems(refineryOutputItems);
         if(refineryOutputItems.Count == 0) return;
-        IntermixAllTimeCountTransfered = (int)refineryOutputItems[0].Amount;
+        IntermixAllTimeCountTransfered += (int)refineryOutputItems[0].Amount;
         IntermixAllTimeCountTransferedMoney = IntermixAllTimeCountTransfered * 1494;
 
         deutRefinery.GetInventory(1).TransferItemTo(deutIntermixContainersList.Find(cont => cont.GetInventory(0).CanItemsBeAdded(refineryOutputItems[0].Amount, refineryOutputItems[0].Type)).GetInventory(0), 0, null, true, refineryOutputItems[0].Amount);
@@ -151,12 +158,24 @@ void TransferMatrixResourceToRefMatsCargo(){
 }
 
 void BalanceProcessorInput(IMyRefinery refin, MyInventoryItem item){
+    if( refin == null || item == null) return;
     IMyCargoContainer carg = refineryMatsContainersList.Find(container => container.GetInventory(0).CanItemsBeAdded(item.Amount, item.Type));
     if(carg == null) RenameCargoContainer();
+    
 
     var items = new List<MyInventoryItem>();
     refin.GetInventory(0).GetItems(items);
-    refin.GetInventory(0).TransferItemTo(carg.GetInventory(0), items.IndexOf(item), null, true, item.Amount);
+    items.Find(itemf => itemf.Type.SubtypeId == item.Type.SubtypeId);
+    try
+    {
+        refin.GetInventory(0).TransferItemTo(carg.GetInventory(0), items.IndexOf(item), null, true, item.Amount);
+    }
+    catch (Exception e)
+    {
+        
+        Echo("Failed to balance processor: " + e);
+    }
+    
 }
 
 void FillDeutProcessors(){
@@ -210,11 +229,11 @@ void FillDeutProcessors(){
                 else if (refineryInputItem.Type.SubtypeId.Contains("DilithiumMatrix"))
                 {
                     dilMatrixPresent = true;
-                    
+                    /*
                     if (refineryInputItem.Amount > 500){
                         BalanceProcessorInput(deutRefinery, refineryInputItem);
                         //Echo("Balancing Refinery input out of DilithiumMatrix!");
-                    }
+                    }*/
                 }
                 else if (refineryInputItem.Type.SubtypeId.Contains("Deuterium"))
                 {
@@ -239,6 +258,7 @@ void FillDeutProcessors(){
             if(!deuteriumPresent){
                 if(TransferMaterialsIntoProcessor(deutRefinery, "Deuterium", deuteriumCount)){
                     //Echo("Transfered " + 2000 + "of Deuterium to " + deutRefinery.CustomName);
+                    DeuteriumUsageTotal += (int)deuteriumCount;
                 }
                 
             }
@@ -246,6 +266,7 @@ void FillDeutProcessors(){
             if(!antiDeuteriumPresent){
                 if(TransferMaterialsIntoProcessor(deutRefinery, "AntiDeuterium", antiDeuteriumCount)){}
                 //Echo("Transfered " + 2000 + "of AntiDeuterium to " + deutRefinery.CustomName);
+                AntiDeuteriumUsageTotal += (int)antiDeuteriumCount;
             }
         }
         refCount++;
@@ -330,8 +351,11 @@ void RenameCargoContainer(){
 }
 void SaveToCD(){
     var data = "";
-    data = "DilithiumMatrixAllTimeCountTransfered:" + DilithiumMatrixAllTimeCountTransfered + "\n" + "DilithiumMatrixAllTimeCountTransferedMoney:" + DilithiumMatrixAllTimeCountTransferedMoney + "\n" + "IntermixAllTimeCountTransfered:" + IntermixAllTimeCountTransfered + "\n" + "IntermixAllTimeCountTransferedMoney:" + IntermixAllTimeCountTransferedMoney + "\n" + "TimeSinceFirstRun" + TimeSinceFirstRun;
+    TimeSpan timeSinceLastSave = TimeSinceFirstRun - lastSaveTime;
+    TimeActiveTotal += timeSinceLastSave;
+    data = "DilithiumMatrixAllTimeCountTransfered:" + DilithiumMatrixAllTimeCountTransfered + "\n" + "DilithiumMatrixAllTimeCountTransferedMoney:" + DilithiumMatrixAllTimeCountTransferedMoney + "\n" + "IntermixAllTimeCountTransfered:" + IntermixAllTimeCountTransfered + "\n" + "IntermixAllTimeCountTransferedMoney:" + IntermixAllTimeCountTransferedMoney + "\n" + "DeuteriumUsageTotal:" + DeuteriumUsageTotal + "\n" + "AntiDeuteriumUsageTotal:" + AntiDeuteriumUsageTotal + "\n"+ "TimeActiveTotal:" + TimeActiveTotal + "\n";
     Me.CustomData = data;
+    lastSaveTime = TimeSinceFirstRun;
 }
 void LoadDataFromCD(){
     var data = Me.CustomData;
@@ -366,9 +390,17 @@ void LoadDataFromCD(){
         else if (values[0] == "IntermixAllTimeCountTransferedMoney"){
             IntermixAllTimeCountTransferedMoney = int.Parse(values[1]);
         }
-        else if( values[0] == "TimeSinceFirstRun")
+        else if( values[0] == "TimeActiveTotal")
         {
-            TimeSinceFirstRun = TimeSpan.Parse(values[1]);
+            TimeActiveTotal = TimeSpan.Parse(values[1]);
+        }
+        else if( values[0] == "DeuteriumUsageTotal")
+        {
+            DeuteriumUsageTotal = int.Parse(values[1]);
+        }
+        else if( values[0] == "AntiDeuteriumUsageTotal")
+        {
+            AntiDeuteriumUsageTotal = int.Parse(values[1]);
         }
     }
 }
