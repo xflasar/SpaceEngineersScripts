@@ -1,0 +1,9 @@
+Economy Manager
+
+- Primarly used to identify all items in a grid, get the amount of them and then price them by lowest price on Star Trek Continuum Space Engineers server (economy by NPC Trade Stations).
+
+- Features
+-> Main Grid Only Pricing
+-> LCD View of all Found Items
+-> Sorting by ether Highest priced owned items or by Total Price of an item
+-> Using Arguments transfer items to named Container (Probably not depends..)

@@ -257,7 +257,6 @@ void FillDeutProcessors(){
                 if(TransferMaterialsIntoProcessor(deutRefinery, "Deuterium", deuteriumCount)){
                     DeuteriumUsageTotal += (int)deuteriumCount;
                 }
-                
             }
                 
             if(!antiDeuteriumPresent){
@@ -290,8 +289,9 @@ void RenameCargoContainer(){
     {
         if (container.CustomName.Contains("Deuterium Intermix")){
             double volume = ((double)container.GetInventory(0).CurrentVolume / (double)container.GetInventory(0).MaxVolume) * 100;
-            if(volume > 99){
-                containerList.Find(containerE => !containerE.CustomName.Contains("Deuterium Intermix") || !containerE.CustomName.Contains("Refinery Materials")).CustomName = "Deuterium Intermix";
+            if(volume > 101){
+                IMyCargoContainer contair = containerList.Find(containerE => !containerE.CustomName.Contains("Deuterium Intermix") || !containerE.CustomName.Contains("Refinery Materials"));
+                contair.CustomName = "Deuterium Intermix";
             }
             else{
                 container.CustomName = "Deuterium Intermix (" + volume + "%)";
@@ -299,8 +299,9 @@ void RenameCargoContainer(){
         }
         else if(container.CustomName.Contains("Refinery Materials")){
             double volume = ((double)container.GetInventory(0).CurrentVolume / (double)container.GetInventory(0).MaxVolume) * 100;
-            if(volume > 99){
-                containerList.Find(containerE => !containerE.CustomName.Contains("Deuterium Intermix") || !containerE.CustomName.Contains("Refinery Materials")).CustomName = "Refinery Materials";
+            if(volume > 101){
+                IMyCargoContainer contair = containerList.Find(containerE => !containerE.CustomName.Contains("Deuterium Intermix") || !containerE.CustomName.Contains("Refinery Materials"));
+                contair.CustomName = "Refinery Materials";
             }
             else{
                 container.CustomName = "Refinery Materials (" + volume + "%)";
