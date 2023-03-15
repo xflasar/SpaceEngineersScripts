@@ -24,6 +24,7 @@ List<string> oreToRefine = new List<string> {
 	//"Platinum",
 	//"Magnesium",
 	//"Scrap",
+    "Dilithium",
     "Tritanium",
     "Duranium"
 }; 
@@ -34,7 +35,7 @@ List<string> oreToRefine = new List<string> {
 int programDelay = 5;
 int programDelayCounter = 0;
 
-void Program()
+Program()
 {
   // Configure this program to run the Main method every 100 update ticks
     Runtime.UpdateFrequency = UpdateFrequency.Update100;
@@ -49,7 +50,7 @@ void MoveOreToRefinery(IMyCargoContainer container, IMyRefinery refinery, string
     List<MyInventoryItem> containerItems = new List<MyInventoryItem>();
     container.GetInventory(0).GetItems(containerItems);
     // Find the ore to move to the refinery
-    MyInventoryItem oreItem = containerItems.Find(item => item.Type.SubtypeId == oreName && item.Type.TypeId == "MyObjectBuilder_Ore");
+    MyInventoryItem oreItem = containerItems.Find(item => item.Type.SubtypeId.Contains(oreName) && item.Type.TypeId == "MyObjectBuilder_Ore");
 
     if (oreItem != null)
     {
@@ -57,7 +58,7 @@ void MoveOreToRefinery(IMyCargoContainer container, IMyRefinery refinery, string
         refinery.GetInventory(0).GetItems(refItems);
         refItems.ForEach(item => 
         {
-            if(item.Type.SubtypeId != oreName){
+            if(!item.Type.SubtypeId.Contains(oreName)){
                 refinery.GetInventory(0).TransferItemTo(containerList.Find(containerOut => containerOut.GetInventory(0).CanItemsBeAdded(item.Amount, item.Type)).GetInventory(0), 0, null, true, item.Amount);
             }
         });
@@ -84,11 +85,11 @@ void FindNonEmptyOreCargoContainers(){
     filledContainerList = containerList.Where(container => {
         var items = new List<MyInventoryItem>();
         container.GetInventory(0).GetItems(items);
-        if(items.Count == 0) return;
+        //if(items.Count == 0) return;
 
-        if(items.Any(items => item.Type.TypeId == "MyObjectBuilder_Ore")) return true;
+        if(items.Any(item => item.Type.TypeId == "MyObjectBuilder_Ore")) return true;
         return false;
-    });
+    }).ToList();
 }
 
 
@@ -98,12 +99,14 @@ IMyCargoContainer FindCargoContainer(){
         var items = new List<MyInventoryItem>();
         container.GetInventory(0).GetItems(items);
 
-        if(items.Count == 0) return;
-        else if( items.Find(item => item.Type.SubtypeId == oreToRefine[0]) != null){
+        if(items.Count == 0) return false;
+        if( items.Find(item => item.Type.SubtypeId.Contains(oreToRefine[0])) != null){
             Echo("Found!");
-            return container;
+            return true;
         }
+        return false;
     });
+    return containerF;
 }
 void Main(string argument)
 {
@@ -120,11 +123,10 @@ void Main(string argument)
             IMyCargoContainer container = containerList.Find(item => {
                 List<MyInventoryItem> invItems = new List<MyInventoryItem>();
                 item.GetInventory(0).GetItems(invItems);
-                if(invItems.Count > 0) containerOcupied++;
 
                 if(invItems.Any(oreItems =>
                 {
-                    if( oreItems.Type.TypeId == "MyObjectBuilder_Ore" && oreItems.Type.SubtypeId.ToString() == oreToRefine){
+                    if( oreItems.Type.TypeId == "MyObjectBuilder_Ore" && oreItems.Type.SubtypeId.Contains(oreToRefine[0])){
                         return true;
                     }
                     return false;
@@ -137,7 +139,7 @@ void Main(string argument)
             Echo("Find cargo container and item in it - Instruction current: " + Runtime.CurrentInstructionCount.ToString());
             if (container != null)
             {
-                MoveOreToRefinery(container, refinery, oreToRefine);
+                MoveOreToRefinery(container, refinery, oreToRefine[0]);
                 MoveRefinedToContainer(refinery, container);
             }
         }

@@ -31,6 +31,7 @@ int DeuteriumUsageTotal = 0;
 int AntiDeuteriumUsageTotal = 0;
 IMyTextPanel lcdPanel;
 IEnumerator<bool> _stateMachine;
+int activeRefineries = 0;
 
 Program()
 {
@@ -84,6 +85,8 @@ public IEnumerator<bool> RunStuffOverTime()
     while (true) 
     {
         Echo("Performance (Ms): " + Runtime.LastRunTimeMs);
+        Echo("Active Refineries: " + activeRefineries);
+        Echo("DilithiumMatrixAmount: " + DilithiumMatrixAmountCur);
         if(500 > counter){
             counter++;
         }else
@@ -205,6 +208,7 @@ void FillDeutProcessors(){
         }
         enabledRefineries.Add(deutRefList[i-1]);
     }
+    activeRefineries = enabledRefineries.Count;
 
     enabledRefineries.ForEach(deutRefinery =>
     {

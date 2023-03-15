@@ -13,6 +13,7 @@
 
 // Lists
 List<IMyCargoContainer> containersList = new List<IMyCargoContainer>();
+List<IMyCargoContainer> containerDilMatrixList = new List<IMyCargoContainer>();
 List<IMyAssembler> assemblers = new List<IMyAssembler>();
 List<LearnedBlueprint> lBlueprints = new List<LearnedBlueprint>();
 List<IMyTextPanel> lcdPanelList = new List<IMyTextPanel>();
@@ -36,6 +37,7 @@ public Program(){
     GridTerminalSystem.GetBlocksOfType(containersList, b => b.CubeGrid == Me.CubeGrid);
     GridTerminalSystem.GetBlocksOfType(lcdPanelList, b => b.CubeGrid == Me.CubeGrid);
 
+    GridTerminalSystem.GetBlocksOfType(containerDilMatrixList, b => b.CustomName.Contains("DilithiumMatrix Cargo"));
     // Move to an method lazy mate...
     assemblers = assemblers.Where(assembler => assembler.CustomName.Contains("Assembler")).ToList();
 
@@ -43,14 +45,16 @@ public Program(){
     LoadLearnedBlueprints();
 }
 
-public void Main(string argument, UpdateType updateSource){
+public void Main(string argument, UpdateType updateSource)
+{
     // RuntimeLag + 5sec
-    if(runtimeLagger < runtimeLaggerDelay)
+    if (runtimeLagger < runtimeLaggerDelay)
     {
         runtimeLagger++;
         //Echo("Main method instructions (runtimeLagger): " + Runtime.CurrentInstructionCount.ToString());
     }
-    else{
+    else
+    {
         runtimeLagger = 0;
         _logger.SetRuns(_logger.GetRuns() + 1);
         //LCD handleout
@@ -61,13 +65,26 @@ public void Main(string argument, UpdateType updateSource){
         ManageCurrentItems();
 
         // Assembler handleout
-        try{
+        try
+        {
             MainAssembly();
         }
         catch (Exception ex)
         {
             Echo("Error: " + ex.ToString());
         }
+
+        // This is for EnemyOwned Assemblers -> The cargo and assemblers have to be connected!!! and set to share with all to work!!!
+        List<IMyAssembler> asemblyEnemy = assemblers.Where(assembler => assembler.OwnerId != Me.OwnerId).ToList();
+        asemblyEnemy.ForEach(asse => {
+            var items = new List<MyInventoryItem>();
+            asse.GetInventory(1).GetItems(items);
+
+            items.ForEach(item => {
+
+                Echo(containerDilMatrixList.Find(cont => cont.GetInventory(0).CanItemsBeAdded(item.Amount, item.Type)).GetInventory(0).TransferItemFrom(asse.GetInventory(1), 0, null, true, item.Amount).ToString());
+            });
+        });
 
         // Logs
         //QueueListPrint();
@@ -76,6 +93,8 @@ public void Main(string argument, UpdateType updateSource){
         Echo("Main method instructions (Main Loop): " + Runtime.CurrentInstructionCount.ToString());
         Echo(_logger.GetRuntime().ToString());
         Echo("Script runs: " + _logger.GetRuns());
+
+        Echo("Assemblers: " + assemblers.Count.ToString());
         //_logger.GetLoggerLog().ForEach(log => Echo(log.LogType + " : " + log.LogMsg));
     }
 }
