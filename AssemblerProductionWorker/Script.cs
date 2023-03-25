@@ -18,11 +18,473 @@ List<IMyAssembler> assemblers = new List<IMyAssembler>();
 List<LearnedBlueprint> lBlueprints = new List<LearnedBlueprint>();
 List<IMyTextPanel> lcdPanelList = new List<IMyTextPanel>();
 
+// Unfortunatelly KEEN doesn't want to give us access to Blueprint.Result to get materials needed to make the blueprint item so this Dictionary is side way to make it possible
+List<ItemBlueprint> _itemBlueprintResult = new List<ItemBlueprint> {
+    // Components
+    // Vanilla
+    new ItemBlueprint("Bulletproof Glass", new Dictionary<string, double>(){
+        {"Silicon Wafer", 5.00}
+    }),
+    new ItemBlueprint("Computer", new Dictionary<string, double>(){
+        {"Iron Ingot", 0.17},
+        {"Silicon Wafer", 0.07}
+    }),
+    new ItemBlueprint("Construction Component", new Dictionary<string, double>(){
+        {"Iron Ingot", 2.67}
+    }),
+    new ItemBlueprint("Detector Component", new Dictionary<string, double>(){
+        {"Iron Ingot", 1.67},
+        {"Nickel Ingot", 5.00}
+    }),
+    new ItemBlueprint("Display", new Dictionary<string, double>(){
+        {"Iron Ingot", 0.33},
+        {"Silicon Wafer", 1.67}
+    }),
+    new ItemBlueprint("Explosives", new Dictionary<string, double>(){
+        {"Silicon Wafer", 0.17},
+        {"Magnesium Powder", 0.67}
+    }),
+    new ItemBlueprint("Girder", new Dictionary<string, double>(){
+        {"Iron Ingot", 2.00}
+    }),
+    new ItemBlueprint("Gravity Component", new Dictionary<string, double>(){
+        {"Silver Ingot", 1.67},
+        {"Gold Ingot", 3.33},
+        {"Cobalt Ingot", 73.33},
+        {"Iron Ingot", 200.00}
+    }),
+    new ItemBlueprint("Interior Plate", new Dictionary<string, double>(){
+        {"Iron Ingot", 1.00}
+    }),
+    new ItemBlueprint("Large Steel Tube", new Dictionary<string, double>(){
+        {"Iron Ingot", 10.00}
+    }),
+    new ItemBlueprint("Medical Component", new Dictionary<string, double>(){
+        {"Iron Ingot", 20.00},
+        {"Nickel Ingot", 23.33},
+        {"Silver Ingot", 6.67}
+    }),
+    new ItemBlueprint("Metal Grid", new Dictionary<string, double>(){
+        {"Iron Ingot", 4.00},
+        {"Nickel Ingot", 1.67},
+        {"Cobalt Ingot", 1.00}
+    }),
+    new ItemBlueprint("Motor", new Dictionary<string, double>(){
+        {"Iron Ingot", 6.67},
+        {"Nickel Ingot", 1.67}
+    }),
+    new ItemBlueprint("Power Cell", new Dictionary<string, double>(){
+        {"Iron Ingot", 3.33},
+        {"Silicon Wafer", 0.33},
+        {"Nickel Ingot", 0.67}
+    }),
+    new ItemBlueprint("Radio-comm Component", new Dictionary<string, double>(){
+        {"Iron Ingot", 2.67},
+        {"Silicon Wafer", 0.33}
+    }),
+    new ItemBlueprint("Reactor Component", new Dictionary<string, double>(){
+        {"Iron Ingot", 5.00},
+        {"Gravel", 6.67},
+        {"Silver Ingot", 1.67}
+    }),
+    new ItemBlueprint("Small Steel Tube", new Dictionary<string, double>(){
+        {"Iron Ingot", 1.67}
+    }),
+    new ItemBlueprint("Solar Cell", new Dictionary<string, double>(){
+        {"Nickel Ingot", 1.00},
+        {"Silicon Wafer", 2.00}
+    }),
+    new ItemBlueprint("Steel Plate", new Dictionary<string, double>(){
+        {"Iron Ingot", 7.00}
+    }),
+    new ItemBlueprint("Superconductor", new Dictionary<string, double>(){
+        {"Iron Ingot", 3.33},
+        {"Gold Ingot", 0.67}
+    }),
+    new ItemBlueprint("Thruster Component", new Dictionary<string, double>(){
+        {"Iron Ingot", 10.00},
+        {"Cobalt Ingot", 3.33},
+        {"Gold Ingot", 0.33},
+        {"Platinum Ingot", 0.13}
+    }),
+    // Modded Components Star Trek Continuum
+    new ItemBlueprint("Duranium Grid", new Dictionary<string, double>(){
+        {"Duranium Ingot", 1.67}
+    }),
+    new ItemBlueprint("Nanovirus Chip", new Dictionary<string, double>(){
+        {"Iron Ingot", 6.67},
+        {"Nickel Ingot", 6.67},
+        {"Silicon Wafer", 6.67},
+        {"Gold Ingot", 8.33},
+        {"Platinum Ingot", 8.33}
+    }),
+    new ItemBlueprint("Field Emitter", new Dictionary<string, double>(){
+        {"Platinum Ingot", 2.67},
+        {"Iron Ingot", 26.67},
+        {"Silicon Wafer", 6.67},
+        {"Gold Ingot", 5.00}
+    }),
+    new ItemBlueprint("Gold Pressed Latinum", new Dictionary<string, double>(){
+        {"Latinum Ingot", 10.00},
+        {"Gold Ingot", 20.00},
+        {"Platinum Ingot", 3.33}
+    }),
+    new ItemBlueprint("Transparent Aluminum Plate", new Dictionary<string, double>(){
+        {"Aluminum Ingot", 10.00},
+        {"Silver Ingot", 6.67}
+    }),
+    new ItemBlueprint("Tritanium Plate", new Dictionary<string, double>(){
+        {"Tritanium Ingot", 2.33},
+        {"Duranium Ingot", 1.00}
+    }),
+    // Tools Vanilla
+    new ItemBlueprint("PRO-1", new Dictionary<string, double>(){
+        {"Iron Ingot", 10.00},
+        {"Nickel Ingot", 3.33},
+        {"Cobalt Ingot", 1.67},
+        {"Platinum Ingot", 1.67}
+    }),
+    new ItemBlueprint("Grinder", new Dictionary<string, double>(){
+        {"Iron Ingot", 1.00},
+        {"Nickel Ingot", 0.33},
+        {"Gravel", 1.67},
+        {"Silicon Wafer", 0.33}
+    }),
+    new ItemBlueprint("MR-20", new Dictionary<string, double>(){
+        {"Iron Ingot", 1.00},
+        {"Nickel Ingot", 0.33}
+    }),
+    new ItemBlueprint("RO-1", new Dictionary<string, double>(){
+        {"Iron Ingot", 10.00},
+        {"Nickel Ingot", 3.33},
+        {"Cobal Ingot", 1.67}
+    }),
+    new ItemBlueprint("Datapad", new Dictionary<string, double>(){
+        {"Iron Ingot", 0.33},
+        {"Silicon Wafer", 1.67},
+        {"Gravel", 0.33}
+    }),
+    new ItemBlueprint("S-10E", new Dictionary<string, double>(){
+        {"Iron Ingot", 0.33},
+        {"Nickel Ingot", 0.13},
+        {"Platinum Ingot", 0.17},
+        {"Silver Ingot", 0.33}
+    }),
+    new ItemBlueprint("S-20A", new Dictionary<string, double>(){
+        {"Iron Ingot", 0.50},
+        {"Nickel Ingot", 0.17}
+    }),
+    new ItemBlueprint("Hand Drill", new Dictionary<string, double>(){
+        {"Iron Ingot", 6.67},
+        {"Nickel Ingot", 1.00},
+        {"Silicon Wafer", 1.00}
+    }),
+    new ItemBlueprint("Hydrogen Bottle", new Dictionary<string, double>(){
+        {"Iron Ingot", 26.67},
+        {"Silicon Wafer", 3.33},
+        {"Nickel Ingot", 10.00}
+    }),
+    new ItemBlueprint("Oxygen Bottle", new Dictionary<string, double>(){
+        {"Iron Ingot", 26.67},
+        {"Silicon Wafer", 3.33},
+        {"Nickel Ingot", 10.00}
+    }),
+    new ItemBlueprint("MR-8P", new Dictionary<string, double>(){
+        {"Iron Ingot", 1.00},
+        {"Nickel Ingot", 0.33},
+        {"Cobalt Ingot", 1.67}
+    }),
+    new ItemBlueprint("MR-50A", new Dictionary<string, double>(){
+        {"Iron Ingot", 1.00},
+        {"Nickel Ingot", 2.67}
+    }),
+    new ItemBlueprint("S-10", new Dictionary<string, double>(){
+        {"Iron Ingot", 0.33},
+        {"Nickel Ingot", 0.10}
+    }),
+    new ItemBlueprint("MR-30E", new Dictionary<string, double>(){
+        {"Iron Ingot", 1.00},
+        {"Nickel Ingot", 0.33},
+        {"Platinum Ingot", 1.33},
+        {"Silver Ingot", 2.00}
+    }),
+    new ItemBlueprint("Welder", new Dictionary<string, double>(){
+        {"Iron Ingot", 1.67},
+        {"Nickel Ingot", 0.33},
+        {"Gravel", 1.00}
+    }),
+    // Modded Tools Star Trek Continuum
+    new ItemBlueprint("Enhanced Grinder", new Dictionary<string, double>(){
+        {"Iron Ingot", 1.00},
+        {"Nickel Ingot", 0.33},
+        {"Cobalt Ingot", 0.67},
+        {"Silicon Wafer", 2.00}
+    }),
+    new ItemBlueprint("Proficient Grinder", new Dictionary<string, double>(){
+        {"Iron Ingot", 1.00},
+        {"Nickel Ingot", 0.33},
+        {"Cobalt Ingot", 0.33},
+        {"Silicon Wafer", 0.67},
+        {"Silver Ingot", 0.67}
+    }),
+    new ItemBlueprint("Elite Grinder", new Dictionary<string, double>(){
+        {"Iron Ingot", 1.00},
+        {"Nickel Ingot", 0.33},
+        {"Cobalt Ingot", 0.33},
+        {"Silicon Wafer", 0.67},
+        {"Platinum Ingot", 0.67}
+    }),
+    new ItemBlueprint("Paint Gun", new Dictionary<string, double>(){
+        {"Iron Ingot", 1.33},
+        {"Nickel Ingot", 0.33},
+        {"Silicon Wafer", 0.67}
+    }),
+    new ItemBlueprint("Enhanced Hand Drill", new Dictionary<string, double>(){
+        {"Iron Ingot", 6.67},
+        {"Nickel Ingot", 1.00},
+        {"Silicon Wafer", 1.67}
+    }),
+    new ItemBlueprint("Proficient Hand Drill", new Dictionary<string, double>(){
+        {"Iron Ingot", 6.67},
+        {"Nickel Ingot", 1.00},
+        {"Silicon Wafer", 1.00},
+        {"Silver Ingot", 0.67}
+    }),
+    new ItemBlueprint("Elite Hand Drill", new Dictionary<string, double>(){
+        {"Iron Ingot", 6.67},
+        {"Nickel Ingot", 1.00},
+        {"Silicon Wafer", 1.00},
+        {"Platinum Ingot", 0.67}
+    }),
+    new ItemBlueprint("Enhanced Welder", new Dictionary<string, double>(){
+        {"Iron Ingot", 1.67},
+        {"Nickel Ingot", 0.33},
+        {"Cobalt Ingot", 0.07},
+        {"Silicon Wafer", 0.67}
+    }),
+    new ItemBlueprint("Proficient Welder", new Dictionary<string, double>(){
+        {"Iron Ingot", 1.67},
+        {"Nickel Ingot", 0.33},
+        {"Cobalt Ingot", 0.07},
+        {"Silver Ingot", 0.67}
+    }),
+    new ItemBlueprint("Elite Welder", new Dictionary<string, double>(){
+        {"Iron Ingot", 1.67},
+        {"Nickel Ingot", 0.33},
+        {"Cobalt Ingot", 0.07},
+        {"Platinum Ingot", 0.67}
+    }),
+    // Consumables Vanilla
+    new ItemBlueprint("Autocannon Magazine", new Dictionary<string, double>(){
+        {"Iron Ingot", 8.33},
+        {"Nickel Ingot", 1.00},
+        {"Magnesium Powder", 0.67}
+    }),
+    new ItemBlueprint("MR-20 Magazine", new Dictionary<string, double>(){
+        {"Iron Ingot", 0.27},
+        {"Nickel Ingot", 0.07},
+        {"Magnesium Powder", 0.05}
+    }),
+    new ItemBlueprint("Canvas", new Dictionary<string, double>(){
+        {"Silicon Wafer", 11.67},
+        {"Iron Ingot", 0.67}
+    }),
+    new ItemBlueprint("S-10E Magazine", new Dictionary<string, double>(){
+        {"Iron Ingot", 0.10},
+        {"Nickel Ingot", 0.03},
+        {"Magnesium Powder", 0.03}
+    }),
+    new ItemBlueprint("S-20A", new Dictionary<string, double>(){
+        {"Iron Ingot", 0.17},
+        {"Nickel Ingot", 0.03},
+        {"Magnesium Powder", 0.07}
+    }),
+    new ItemBlueprint("Artillery Shell", new Dictionary<string, double>(){
+        {"Iron Ingot", 20.00},
+        {"Nickel Ingot", 2.67},
+        {"Magnesium Powder", 1.67},
+        {"Uranium Ingot", 0.03}
+    }),
+    new ItemBlueprint("Large Railgun Sabot", new Dictionary<string, double>(){
+        {"Iron Ingot", 6.67},
+        {"Nickel Ingot", 1.00},
+        {"Silicon Wafer", 10.00},
+        {"Uranium Ingot", 0.33}
+    }),
+    new ItemBlueprint("Assault Cannon Shell", new Dictionary<string, double>(){
+        {"Iron Ingot", 5.00},
+        {"Nickel Ingot", 0.67},
+        {"Magnesium Powder", 0.40}
+    }),
+    new ItemBlueprint("Missile", new Dictionary<string, double>(){
+        {"Iron Ingot", 18.33},
+        {"Nickel Ingot", 2.33},
+        {"Silicon Wafer", 0.07},
+        {"Uranium Ingot", 0.03},
+        {"Platinum Ingot", 0.01},
+        {"Magnesium Powder", 0.40}
+    }),
+    new ItemBlueprint("Gatling Ammo Box", new Dictionary<string, double>(){
+        {"Iron Ingot", 13.33},
+        {"Nickel Ingot", 1.67},
+        {"Magnesium Powder", 1.00}
+    }),
+    new ItemBlueprint("MR-8P Magazine", new Dictionary<string, double>(){
+        {"Iron Ingot", 0.27},
+        {"Nickel Ingot", 0.07},
+        {"Magnesium Powder", 0.05}
+    }),
+    new ItemBlueprint("MR-50A Magazine", new Dictionary<string, double>(){
+        {"Iron Ingot", 0.67},
+        {"Nickel Ingot", 0.17},
+        {"Magnesium Powder", 0.13}
+    }),
+    new ItemBlueprint("S-10 Magazine", new Dictionary<string, double>(){
+        {"Iron Ingot", 0.08},
+        {"Nickel Ingot", 0.02},
+        {"Magnesium Powder", 0.02}
+    }),
+    new ItemBlueprint("Small Railgun Sabot", new Dictionary<string, double>(){
+        {"Iron Ingot", 1.33},
+        {"Nickel Ingot", 0.17},
+        {"Silicon Wafer", 1.67},
+        {"Uranium Ingot", 0.07}
+    }),
+    new ItemBlueprint("MR-30E Magazine", new Dictionary<string, double>(){
+        {"Iron Ingot", 0.40},
+        {"Nickel Ingot", 0.13},
+        {"Magnesium Powder", 0.08}
+    }),
+    // Modded Consumables Star Trek Continuum
+    new ItemBlueprint("Paint Chemicals", new Dictionary<string, double>(){
+        {"Gravel", 0.01}
+    }),
+    new ItemBlueprint("Photon Torpedo Magazine", new Dictionary<string, double>(){
+        {"Tritanium Plate", 3.33},
+        {"Torpedo Casing", 1.00},
+        {"Matter / Anti-Matter Chamber", 2.00},
+        {"Torpedo Thruster", 2.00},
+        {"Isolinear Chip", 11.67}
+    }),
+    new ItemBlueprint("Quantum Torpedo Magazine", new Dictionary<string, double>(){
+        {"Tritanium Plate", 10.00},
+        {"Torpedo Casing", 2.00},
+        {"Matter / Anti-Matter Chamber", 3.00},
+        {"Torpedo Thruster", 5.00},
+        {"Isolinear Chip", 20.00}
+    }),
+    new ItemBlueprint("Photon Torpedo Magazine (Small)", new Dictionary<string, double>(){
+        {"Tritanium Plate", 1.00},
+        {"Torpedo Casing", 1.00},
+        {"Matter / Anti-Matter Chamber", 1.00},
+        {"Torpedo Thruster", 1.00},
+        {"Isolinear Chip", 5.00}
+    }),
+    new ItemBlueprint("Quantum Torpedo Magazine (Small)", new Dictionary<string, double>(){
+        {"Tritanium Plate", 5},
+        {"Torpedo Casing", 1.00},
+        {"Matter / Anti-Matter Chamber", 1.00},
+        {"Torpedo Thruster", 1.00},
+        {"Isolinear Chip", 10.00}
+    }),
+    new ItemBlueprint("Spatial Torpedo Magazine", new Dictionary<string, double>(){
+        {"Tritanium Plate", 3.33},
+        {"Silicon Wafer", 16.67},
+        {"Uranium Ingot", 6.67},
+        {"Platinum Ingot", 3.33},
+        {"Computer", 6.67},
+        {"Gold Ingot", 8.33}
+    }),
+    new ItemBlueprint("Spatial Torpedo Magazine (Small)", new Dictionary<string, double>(){
+        {"Tritanium Plate", 1.67},
+        {"Silicon Wafer", 8.33},
+        {"Uranium Ingot", 1.67},
+        {"Platinum Ingot", 1.33},
+        {"Computer", 3.67},
+        {"Gold Ingot", 3.33}
+    }),
+    new ItemBlueprint("Isolinear Chip", new Dictionary<string, double>(){
+        {"Tritanium Ingot", 6.67},
+        {"Silicon Wafer", 1.67},
+        {"Gold Ingot", 0.33},
+        {"Silver Ingot", 0.22},
+        {"Duranium Ingot", 0.33}
+    }),
+    new ItemBlueprint("Matter '\' Anti-Matter Chamber", new Dictionary<string, double>(){
+        {"Tritanium Ingot", 5.00},
+        {"Silicon Wafer", 16.67},
+        {"Refined Dilithium", 6.67},
+        {"Deuterium Intermix Containment Unit", 3.00},
+        {"Magnesium Powder", 10.00},
+        {"Duranium Ingot", 3.33},
+        {"Gold Ingot", 8.33}
+    }),
+    new ItemBlueprint("Torpedo Casing", new Dictionary<string, double>(){
+        {"Tritanium Ingot", 10.00},
+        {"Silicon Wafer", 10.00},
+        {"Iron Ingot", 6.67},
+        {"Aluminum Ingot", 3.33},
+        {"Nickel Ingot", 6.67},
+        {"Duranium Ingot", 6.67},
+        {"Gold Ingot", 8.33}
+    }),
+    new ItemBlueprint("Torpedo Thruster", new Dictionary<string, double>(){
+        {"Tritanium Ingot", 5.00},
+        {"Silicon Wafer", 16.67},
+        {"Refined Dilithium", 6.67},
+        {"Deuterium Intermix Containment Unit", 6.67},
+        {"Platinum Ingot", 3.33},
+        {"Duranium Ingot", 3.33},
+        {"Gold Ingot", 8.33}
+    }),
+    new ItemBlueprint("Transphasic Matter Chamber", new Dictionary<string, double>(){
+        {"Tritanuim Ingot", 5.00},
+        {"Silicon Wafer", 16.67},
+        {"Refined Dilithium", 6.67},
+        {"Deuterium Intermix Containment Unit", 3.00},
+        {"Refined Transphasic Matter", 20.00},
+        {"Magnesium Powder", 10.00},
+        {"Duranium Ingot", 6.67},
+        {"Gold Ingot", 16.67}
+    }),
+    // Modded Tech Star Trek Continuum
+    new ItemBlueprint("Common Tech", new Dictionary<string, double>(){
+        {"Tritanium Ingot", 15.00},
+        {"Iron Ingot", 500.00},
+        {"Silicon Wafer", 250.00},
+        {"Cobalt Ingot", 50.00},
+        {"Gold Ingot", 25.00},
+        {"Aluminum Ingot", 100.00}
+    }),
+    new ItemBlueprint("Rare Tech", new Dictionary<string, double>(){
+        {"Tritanium Ingot", 15.00},
+        {"Iron Ingot", 1000.00},
+        {"Silicon Wafer", 500.00},
+        {"Silver Ingot", 100.00},
+        {"Gold Ingot", 30.00},
+        {"Uranium Ingot", 20.00},
+        {"Kemocite Ingot", 50.00},
+        {"Common Tech", 2.00}
+    }),
+    new ItemBlueprint("Exotic Tech", new Dictionary<string, double>(){
+        {"Tritanium Ingot", 15.00},
+        {"Iron Ingot", 1000.00},
+        {"Silicon Wafer", 500.00},
+        {"Duranium Ingot", 66.67},
+        {"Refined Dilithium", 10.00},
+        {"Platinum Ingot", 30.00},
+        {"Neutronium Ingot", 50.00},
+        {"Rare Tech", 2.00}
+    })
+};
+
+
 // Dictionary
 Dictionary<string, int> lcdAssemblerStreamData = new Dictionary<string, int>();
 Dictionary<MyDefinitionId, int> queueItems = new Dictionary<MyDefinitionId, int>();
 Dictionary<string, int> currentItems = new Dictionary<string, int>();
 
+// Unfortunatelly KEEN doesn't want to give us access to Blueprint.Result to get materials needed to make the blueprint item so this Dictionary is side way to make it possible
 // variables
 int runtimeLagger = 0;
 int runtimeLaggerDelay = 5; // Default 5 seconds Non-Active 20 seconds -> This works as limiter for resource drainer 
@@ -99,6 +561,16 @@ public void Main(string argument, UpdateType updateSource)
     }
 }
 
+// Helper for ItemBlueprintResult List
+struct ItemBlueprint{
+    public ItemBlueprint(string Name, Dictionary<string, double> materialsDic){
+        name = Name;
+        materials = materialsDic;
+    }
+
+    public string name {get; set;}
+    public Dictionary<string, double> materials {get; set;}
+}
 
 
 // Logger
@@ -165,7 +637,69 @@ public class Logger{
 int GetPriorityComponentBP(){
     return 1;
 }
+/*
+// This Method will be for finding and transfering correct amount of needed materials for Current Queue Item
+// NEEDS REWRITING!!!!
+// Get the amount of needed materials for queue item
+void TransferItemsNeededForQueue(){
+    foreach (var assembler in assemblers)
+    {
+        if (!assembler.IsQueueEmpty)
+        {
+            // Get the required materials for the current item in queue
+            var queue = new List<MyProductionItem>();
+            assembler.GetQueue(queue);
+            if(queue.Count == 0) return;
 
+            var currentItem = queue.FirstOrDefault();
+            var blueprintDefinition = Sandbox.Definitions.MyDefinitionManager.Static.GetBlueprintDefinition(currentItem.BlueprintId);
+            var requiredMaterials = blueprintDefinition.Results;
+
+            // Find the required materials in the containers
+            var availableMaterials = new Dictionary<VRage.Game.MyDefinitionId, VRage.MyFixedPoint>();
+            foreach (var material in requiredMaterials)
+            {
+                var amountNeeded = material.Amount;
+                foreach (var container in containersList)
+                {
+                    var amountAvailable = container.GetInventory().GetItemAmount(material.Id);
+                    if (amountAvailable >= amountNeeded)
+                    {
+                        availableMaterials.Add(material.Id, amountNeeded);
+                        break;
+                    }
+                    else if (amountAvailable > 0)
+                    {
+                        availableMaterials.Add(material.Id, amountAvailable);
+                        amountNeeded -= amountAvailable;
+                    }
+                }
+            }
+
+            // Send the required materials to the assembler's input inventory
+            var availableInventoryVolume = assembler.InputInventory.MaxVolume - assembler.InputInventory.CurrentVolume;
+            foreach (var material in availableMaterials)
+            {
+                var amountPerSlot = assembler.InputInventory.MaxStackVolume(material.Key);
+                var numSlotsNeeded = Math.Min((int)Math.Floor((double)availableInventoryVolume / amountPerSlot), (int)Math.Ceiling((double)material.Value / amountPerSlot));
+                foreach (var container in containers)
+                {
+                    var amountTaken = container.GetInventory().TakeItemsById(material.Key, amountPerSlot * numSlotsNeeded);
+                    if (amountTaken > 0)
+                    {
+                        assembler.InputInventory.InsertItems(material.Key, amountTaken);
+                        availableInventoryVolume -= amountTaken;
+                    }
+                }
+            }
+
+            // Split the amount of materials to create whole item amount
+            var currentItemName = currentItem.Blueprint.Id.SubtypeId.ToString();
+            assembler.InputInventory.Split(currentItemName);
+        }
+    }
+}
+*/
 void MainAssembly(){
     ManageQueueAssembly();
 
