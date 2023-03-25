@@ -1,15 +1,12 @@
-// Assembler Manager
+// Assembler Manager - manages the production of items using assemblers
 // Created by xSupeFly
 // Discord: xSupeFly#2911
-// 
-// Assemblers will be filled with queue of required compenents by setting them in LCD with format -> Name: (current amount) / (desired amount) - Done
-// Assemblers will be Cleaned of components ( will be moved to available containers that can hold the amount) - Done
-// LCD will show queue and time of completion in dd:hh:mm:ss - In Progress
-// Reformat code
-// Queue multiple items at same time and change priority depending on need -> This we can use priority to assign free assemblers to each items to be created
-//
-// Producement Will be stored in Storage property for statistics -> Total made
 
+//  Queue items for production using LCD display: Done
+//  Fill assemblers with required components and move excess components to available containers: In Progress
+//  Display production queue and estimated completion time in dd:hh:mm:ss format on LCD display: Planned
+//  Allow for queuing of multiple items simultaneously and assign priority based on need: In Progress
+//  Store production statistics in the Storage property: Planned
 
 // Lists
 List<IMyCargoContainer> containersList = new List<IMyCargoContainer>();
@@ -478,18 +475,14 @@ List<ItemBlueprint> _itemBlueprintResult = new List<ItemBlueprint> {
     })
 };
 
-
 // Dictionary
 Dictionary<string, int> lcdAssemblerStreamData = new Dictionary<string, int>();
 Dictionary<MyDefinitionId, int> queueItems = new Dictionary<MyDefinitionId, int>();
 Dictionary<string, int> currentItems = new Dictionary<string, int>();
 
-// Unfortunatelly KEEN doesn't want to give us access to Blueprint.Result to get materials needed to make the blueprint item so this Dictionary is side way to make it possible
 // variables
 int runtimeLagger = 0;
-int runtimeLaggerDelay = 5; // Default 5 seconds Non-Active 20 seconds -> This works as limiter for resource drainer 
-                            // ( if there was an activity in the 5 sec timer it will be left at 5 second interval if not then it 
-                            // will switch to 20 sec interval of checking)
+int runtimeLaggerDelay = 5; // This variable is a timer with a default interval of 5 seconds. If the timer detects activity during the 5-second interval, it will remain at that interval. However, if no activity is detected, the timer will switch to a 20-second interval to conserve resources. This timer is used to limit resource drainage.
 Logger _logger;
 
 public Program(){
@@ -509,7 +502,7 @@ public Program(){
 
 public void Main(string argument, UpdateType updateSource)
 {
-    // RuntimeLag + 5sec
+    // Check for runtime lags
     if (runtimeLagger < runtimeLaggerDelay)
     {
         runtimeLagger++;
@@ -517,16 +510,19 @@ public void Main(string argument, UpdateType updateSource)
     }
     else
     {
+        // Reset runtime lagger and increment script runs
         runtimeLagger = 0;
         _logger.SetRuns(_logger.GetRuns() + 1);
-        //LCD handleout
-        ReadLCDData(lcdPanelList.Find(panel => panel.CustomName == "LCD Assembler Manager Main"), lcdAssemblerStreamData);
-        SaveLCDData(lcdPanelList.Find(panel => panel.CustomName == "LCD Assembler Manager Main"), lcdAssemblerStreamData);
 
-        // Search the containers for items
+        // Handle LCD display
+        var lcdPanel = lcdPanelList.Find(panel => panel.CustomName == "LCD Assembler Manager Main");
+        ReadLCDData(lcdPanel, lcdAssemblerStreamData);
+        SaveLCDData(lcdPanel, lcdAssemblerStreamData);
+
+        // Manage items in containers
         ManageCurrentItems();
 
-        // Assembler handleout
+        // Handle assembler queues
         try
         {
             MainAssembly();
@@ -536,30 +532,35 @@ public void Main(string argument, UpdateType updateSource)
             Echo("Error: " + ex.ToString());
         }
 
-        // This is for EnemyOwned Assemblers -> The cargo and assemblers have to be connected!!! and set to share with all to work!!!
-        List<IMyAssembler> asemblyEnemy = assemblers.Where(assembler => assembler.OwnerId != Me.OwnerId).ToList();
-        asemblyEnemy.ForEach(asse => {
+        // Handle enemy-owned assemblers
+        List<IMyAssembler> enemyAssemblers = assemblers.Where(assembler => assembler.OwnerId != Me.OwnerId).ToList();
+        enemyAssemblers.ForEach(assembler =>
+        {
             var items = new List<MyInventoryItem>();
-            asse.GetInventory(1).GetItems(items);
+            assembler.GetInventory(1).GetItems(items);
 
-            items.ForEach(item => {
-
-                Echo(containerDilMatrixList.Find(cont => cont.GetInventory(0).CanItemsBeAdded(item.Amount, item.Type)).GetInventory(0).TransferItemFrom(asse.GetInventory(1), 0, null, true, item.Amount).ToString());
+            items.ForEach(item =>
+            {
+                var container = containerDilMatrixList.Find(cont => cont.GetInventory(0).CanItemsBeAdded(item.Amount, item.Type));
+                if (container != null)
+                {
+                    Echo($"{container.GetInventory(0).TransferItemFrom(assembler.GetInventory(1), 0, null, true, item.Amount)}");
+                }
             });
         });
 
-        // Logs
-        //QueueListPrint();
+        // Output runtime information to LCD display
         _logger.SetRuntime(Runtime.TimeSinceLastRun);
         Echo(Runtime.MaxInstructionCount.ToString());
         Echo("Main method instructions (Main Loop): " + Runtime.CurrentInstructionCount.ToString());
         Echo(_logger.GetRuntime().ToString());
         Echo("Script runs: " + _logger.GetRuns());
 
+        // Debug output
         Echo("Assemblers: " + assemblers.Count.ToString());
-        //_logger.GetLoggerLog().ForEach(log => Echo(log.LogType + " : " + log.LogMsg));
     }
 }
+
 
 // Helper for ItemBlueprintResult List
 struct ItemBlueprint{
@@ -572,7 +573,7 @@ struct ItemBlueprint{
     public Dictionary<string, double> materials {get; set;}
 }
 
-
+// This logger is still not implemented it will be used for an resource graph to know what and how much was done/created at the given time and total
 // Logger
 public class Log{
     string logType;
@@ -642,133 +643,98 @@ int GetPriorityComponentBP(){
 // NEEDS REWRITING!!!!
 // Get the amount of needed materials for queue item
 void TransferItemsNeededForQueue(){
-    foreach (var assembler in assemblers)
-    {
-        if (!assembler.IsQueueEmpty)
-        {
-            // Get the required materials for the current item in queue
-            var queue = new List<MyProductionItem>();
-            assembler.GetQueue(queue);
-            if(queue.Count == 0) return;
-
-            var currentItem = queue.FirstOrDefault();
-            var blueprintDefinition = Sandbox.Definitions.MyDefinitionManager.Static.GetBlueprintDefinition(currentItem.BlueprintId);
-            var requiredMaterials = blueprintDefinition.Results;
-
-            // Find the required materials in the containers
-            var availableMaterials = new Dictionary<VRage.Game.MyDefinitionId, VRage.MyFixedPoint>();
-            foreach (var material in requiredMaterials)
-            {
-                var amountNeeded = material.Amount;
-                foreach (var container in containersList)
-                {
-                    var amountAvailable = container.GetInventory().GetItemAmount(material.Id);
-                    if (amountAvailable >= amountNeeded)
-                    {
-                        availableMaterials.Add(material.Id, amountNeeded);
-                        break;
-                    }
-                    else if (amountAvailable > 0)
-                    {
-                        availableMaterials.Add(material.Id, amountAvailable);
-                        amountNeeded -= amountAvailable;
-                    }
-                }
-            }
-
-            // Send the required materials to the assembler's input inventory
-            var availableInventoryVolume = assembler.InputInventory.MaxVolume - assembler.InputInventory.CurrentVolume;
-            foreach (var material in availableMaterials)
-            {
-                var amountPerSlot = assembler.InputInventory.MaxStackVolume(material.Key);
-                var numSlotsNeeded = Math.Min((int)Math.Floor((double)availableInventoryVolume / amountPerSlot), (int)Math.Ceiling((double)material.Value / amountPerSlot));
-                foreach (var container in containers)
-                {
-                    var amountTaken = container.GetInventory().TakeItemsById(material.Key, amountPerSlot * numSlotsNeeded);
-                    if (amountTaken > 0)
-                    {
-                        assembler.InputInventory.InsertItems(material.Key, amountTaken);
-                        availableInventoryVolume -= amountTaken;
-                    }
-                }
-            }
-
-            // Split the amount of materials to create whole item amount
-            var currentItemName = currentItem.Blueprint.Id.SubtypeId.ToString();
-            assembler.InputInventory.Split(currentItemName);
-        }
-    }
 }
 */
-void MainAssembly(){
+void MainAssembly()
+{
     ManageQueueAssembly();
 
-    foreach( var assembler in assemblers){        
+    foreach (var assembler in assemblers)
+    {
         LearnBlueprint(assembler, lBlueprints);
-        if(assembler.IsQueueEmpty)
+
+        if (assembler.IsQueueEmpty)
         {
-            if(queueItems.Count == 0){
+            if (queueItems.Count == 0)
+            {
                 runtimeLaggerDelay = 20;
                 return;
             }
-            foreach(KeyValuePair<MyDefinitionId, int> pair in queueItems){
+
+            foreach (var pair in queueItems)
+            {
                 assembler.AddQueueItem(pair.Key, (decimal)pair.Value);
             }
-            //Echo("Main method instructions (Queue Empty - Yes): " + Runtime.CurrentInstructionCount.ToString());
-        }else{
-            //
-            /// Make method for checking and refreshing Assembler queue
-            //
-            if(assembler.IsProducing)
+        }
+        else
+        {
+            CheckAndRefreshAssemblerQueue(assembler);
+
+            if (assembler.IsProducing)
             {
                 runtimeLaggerDelay = 5;
             }
-            else{
+            else
+            {
                 runtimeLaggerDelay = 20;
             }
 
-            var itemsQueued = new List<MyProductionItem>();
-
-            assembler.GetQueue(itemsQueued);
-
-            if(currentItems.ContainsKey(itemsQueued[0].BlueprintId.SubtypeId.ToString()) && queueItems.ContainsKey(itemsQueued[0].BlueprintId) && itemsQueued.Count != 0)
-            {
-                //Echo("ItemsQueued amount: " + itemsQueued[0].Amount + "\nQueueItems amount: " + queueItems[itemsQueued[0].BlueprintId] + "\nCurrentItems: " + currentItems[itemsQueued[0].BlueprintId.SubtypeId.ToString()] + "\nQueueItems: " + queueItems[itemsQueued[0].BlueprintId]);
-                if(itemsQueued[0].Amount <= (queueItems[itemsQueued[0].BlueprintId] - 150)){
-                    assembler.ClearQueue();
-                }
-                else if(itemsQueued[0].Amount >= (queueItems[itemsQueued[0].BlueprintId] + 150)){
-                    assembler.ClearQueue();
-                }
-                else if(currentItems[itemsQueued[0].BlueprintId.SubtypeId.ToString()] > lcdAssemblerStreamData[itemsQueued[0].BlueprintId.SubtypeId.ToString()]){
-                    //_logger.AddLogItem(new Log("Queue removal" ,"Removed " + queueItems.First().Key.ToString() + " from queue and assemblers"));
-                    assembler.ClearQueue();
-                    if(queueItems.Count <= 0)
-                        queueItems.Remove(queueItems.First().Key);
-                }
-                else{
-                    //Echo("None Hit!");
-                }
-            }
-            //Echo("Main method instructions (Queue Empty - False): " + Runtime.CurrentInstructionCount.ToString());
+            ClearAssemblyLine(assembler);
         }
-        ClearAssemblyLine(assembler);
+    }
+}
+
+void CheckAndRefreshAssemblerQueue(IMyAssembler assembler)
+{
+    var itemsQueued = new List<MyProductionItem>();
+    assembler.GetQueue(itemsQueued);
+
+    if (itemsQueued.Count == 0)
+    {
+        return;
+    }
+
+    var item = itemsQueued[0];
+
+    if (currentItems.ContainsKey(item.BlueprintId.SubtypeId.ToString()) &&
+        queueItems.ContainsKey(item.BlueprintId))
+    {
+        var queuedAmount = queueItems[item.BlueprintId];
+        var currentAmount = currentItems[item.BlueprintId.SubtypeId.ToString()];
+
+        if (item.Amount <= queuedAmount - 150 || item.Amount >= queuedAmount + 150 ||
+            currentAmount > lcdAssemblerStreamData[item.BlueprintId.SubtypeId.ToString()])
+        {
+            assembler.ClearQueue();
+
+            if (queueItems.Count <= 0)
+            {
+                queueItems.Remove(queueItems.First().Key);
+            }
+        }
     }
 }
 
 void ClearAssemblyLine(IMyAssembler assembler)
 {
+    // Get all items in the assembler's output inventory
     var items = new List<MyInventoryItem>();
-
     assembler.GetInventory(1).GetItems(items);
 
-    items.ForEach(item => assembler.GetInventory(1).TransferItemTo(containersList.Find(containerOut => containerOut.GetInventory(0).CanItemsBeAdded(item.Amount, item.Type)).GetInventory(0), 0, null, true, item.Amount));
+    // Transfer each item to the first container that can receive it
+    foreach (var item in items)
+    {
+        var targetContainer = containersList.Find(containerOut => containerOut.GetInventory(0).CanItemsBeAdded(item.Amount, item.Type));
+        assembler.GetInventory(1).TransferItemTo(targetContainer.GetInventory(0), 0, null, true, item.Amount);
+    }
+
+    // Log instructions count
     //Echo("Clear Assembly Line method instructions: " + Runtime.CurrentInstructionCount.ToString());
 }
 
 void ManageQueueAssembly(){
     // Add desired Queue Items
-    foreach (KeyValuePair<string, int> pair in lcdAssemblerStreamData){
+    foreach (var pair in lcdAssemblerStreamData){
 
         // First check difference between currentAmount and desiredAmmount
         var currentAmount = 0;
@@ -777,7 +743,7 @@ void ManageQueueAssembly(){
             currentAmount = 0;
         }
 
-        int queueAmount = 0;
+        var queueAmount = 0;
 
         if(currentAmount < pair.Value){
 
@@ -791,75 +757,76 @@ void ManageQueueAssembly(){
 
             var itemDeffId = GetBlueprintBack(_bp);
             
-            if(assemblers.Count != 0){
-                if(assemblers[0].CanUseBlueprint(itemDeffId)){
-                    //Echo("Item: " + pair.Key + " Usage: True!");
-                    if(queueItems.ContainsKey(itemDeffId)){
-                        queueItems[itemDeffId] = queueAmount/assemblers.Count;
-                    }
-                    else{
-                        queueItems.Add(itemDeffId, pair.Value/assemblers.Count);
-                    }
+            if(assemblers.Count != 0 && assemblers[0].CanUseBlueprint(itemDeffId)){
+                //Echo("Item: " + pair.Key + " Usage: True!");
+                if(queueItems.ContainsKey(itemDeffId)){
+                    queueItems[itemDeffId] = queueAmount/assemblers.Count;
                 }
                 else{
-                    if(queueItems.ContainsKey(itemDeffId)) queueItems.Remove(itemDeffId);
+                    queueItems.Add(itemDeffId, pair.Value/assemblers.Count);
                 }
             } 
+            else if(queueItems.ContainsKey(itemDeffId)) {
+                queueItems.Remove(itemDeffId);
+            }
         }
     }
     //Echo("Manage Queue Assembly method instructions: " + Runtime.CurrentInstructionCount.ToString());
 }
 
-void QueueListPrint(){
-    foreach(KeyValuePair<MyDefinitionId, int> pair in queueItems){
-        Echo(pair.Key.ToString() + "/" + pair.Value);
+void PrintQueueList()
+{
+    foreach(var pair in queueItems)
+    {
+        Echo($"{pair.Key}/{pair.Value}");
     }
 }
 
 // LCD handling
-public void ReadLCDData(IMyTextPanel lcdPanel, Dictionary<string, int> dataStream){
+public void ReadLCDData(IMyTextPanel lcdPanel, Dictionary<string, int> dataStream)
+{
+    var lcdData = lcdPanel.GetPublicText();
 
-    string lcdData = lcdPanel.GetPublicText();
-
-    if(lcdData.Length == 0) return;
-
-    string[] lcdLines = lcdData.Split(new char[] {'\n', '\r'}, StringSplitOptions.RemoveEmptyEntries);
-
-    foreach (string line in lcdLines)
+    if(string.IsNullOrEmpty(lcdData))
     {
-        string[] values = line.Split(':');
-        if(values.Length == 2){
+        return;
+    }
 
-            string itemName = values[0].Trim();
+    var lcdLines = lcdData.Split(new[] {'\n', '\r'}, StringSplitOptions.RemoveEmptyEntries);
+
+    foreach (var line in lcdLines)
+    {
+        var values = line.Split(':');
+        if(values.Length == 2)
+        {
+            var itemName = values[0].Trim();
             int desiredAmount = 0;
-
             int.TryParse(values[1].Substring(1 + values[1].IndexOf("/")), out desiredAmount);
 
-            if (!dataStream.ContainsKey(itemName)){
+            if (!dataStream.ContainsKey(itemName))
+            {
                 dataStream.Add(itemName, desiredAmount);
             }
-            else{
+            else
+            {
                 dataStream[itemName] = desiredAmount;
             }
         }
     }
-    //Echo("Read LCD Data method instructions: " + Runtime.CurrentInstructionCount.ToString());
+    //Echo($"Read LCD Data method instructions: {Runtime.CurrentInstructionCount}");
 }
 
-public void SaveLCDData(IMyTextPanel lcdPanel, Dictionary<string, int> dataStream){
-
+public void SaveLCDData(IMyTextPanel lcdPanel, Dictionary<string, int> dataStream)
+{
     string lcdData = "";
-    int currentAmount = 0;
 
-    foreach (KeyValuePair<string, int> pair in dataStream){
-        if(currentItems.ContainsKey(pair.Key)){
-            currentAmount = currentItems[pair.Key];
-        }
-        else{
-            currentAmount = 0;
-        }
-        lcdData += pair.Key + ":" + currentAmount.ToString()  + "/" + pair.Value.ToString() + "\n";
+    foreach (var pair in dataStream)
+    {
+        int amount = 0;
+        var currentAmount = currentItems.TryGetValue(pair.Key, out amount) ? amount : 0;
+        lcdData += $"{pair.Key}:{currentAmount}/{pair.Value}\n";
     }
+
     lcdPanel.WritePublicText(lcdData);
     //Echo("Save LCD Data method instructions: " + Runtime.CurrentInstructionCount.ToString());
 }
@@ -871,11 +838,14 @@ void LoadDataStream(){
         items.ForEach(item => {
             if(item.Type.TypeId == "MyObjectBuilder_Component")
             {
-                if(!lcdAssemblerStreamData.ContainsKey(item.Type.SubtypeId)){
-                    lcdAssemblerStreamData.Add(item.Type.SubtypeId, (int) item.Amount);
-                }
-                else{
+                int currentAmount = 0;
+                if (lcdAssemblerStreamData.TryGetValue(item.Type.SubtypeId, out currentAmount))
+                {
                     lcdAssemblerStreamData[item.Type.SubtypeId] = (int) item.Amount;
+                }
+                else
+                {
+                    lcdAssemblerStreamData.Add(item.Type.SubtypeId, (int) item.Amount);
                 }
             }
         });
@@ -883,26 +853,31 @@ void LoadDataStream(){
     Echo("Load Data Stream method instructions: " + Runtime.CurrentInstructionCount.ToString());
 }
 
-public void ManageCurrentItems(){
+public void ManageCurrentItems()
+{
     currentItems.Clear();
-    containersList.ForEach(container => {
+    foreach (var container in containersList)
+    {
         var items = new List<MyInventoryItem>();
         container.GetInventory(0).GetItems(items);
-        if(items.Count == 0) return;
-
-        items.ForEach(item => {
-            if(item.Type.TypeId == "MyObjectBuilder_Component")
+        if (items.Count == 0)
+            continue;
+        foreach (var item in items)
+        {
+            if (item.Type.TypeId == "MyObjectBuilder_Component")
             {
-                if(currentItems.ContainsKey(item.Type.SubtypeId)){
-                    currentItems[item.Type.SubtypeId] += (int) item.Amount;
+                int amount = 0;
+                if (currentItems.TryGetValue(item.Type.SubtypeId, out amount))
+                {
+                    currentItems[item.Type.SubtypeId] = amount + (int)item.Amount;
                 }
-                else{
-                    currentItems.Add(item.Type.SubtypeId, (int) item.Amount);
+                else
+                {
+                    currentItems[item.Type.SubtypeId] = (int)item.Amount;
                 }
-                /// Find if clearing the array and then adding items is faster then just rewriting the value
             }
-        });
-    });
+        }
+    }
     //Echo("Manage Current Items method instructions: " + Runtime.CurrentInstructionCount.ToString());
 }
 
@@ -910,32 +885,30 @@ public void ManageCurrentItems(){
 // Probably use the {GetBlueprintBack, LearnBlueprint, LoadLearnedBlueprints} and add it into this class
 public class LearnedBlueprint
 {
-    public string TypeId {get; set;}
-    public string SubtypeId {get; set;}
+    public string TypeId { get; set; }
+    public string SubtypeId { get; set; }
 }
 
 MyDefinitionId GetBlueprintBack(LearnedBlueprint bpTP)
 {
-    MyDefinitionId blueprintId = new MyDefinitionId();
-    blueprintId = MyDefinitionId.Parse(bpTP.TypeId + "/" + bpTP.SubtypeId);
-
+    var blueprintId = MyDefinitionId.Parse($"{bpTP.TypeId}/{bpTP.SubtypeId}");
     return blueprintId;
 }
 
-public void LearnBlueprint(IMyAssembler assembler, List<LearnedBlueprint> learnedBlueprints){
+public void LearnBlueprint(IMyAssembler assembler, List<LearnedBlueprint> learnedBlueprints)
+{
+    var items = new List<MyProductionItem>();
+    assembler.GetQueue(items);
 
-    List<MyProductionItem> Items = new List<MyProductionItem>();
+    if (items.Count == 0) return;
 
-    assembler.GetQueue(Items);
-    
-    if(Items.Count == 0) return;
-    
-    var currentItem = Items[0].BlueprintId;
-    
-    if(currentItem.TypeId.ToString() != "MyObjectBuilder_BlueprintDefinition" && !learnedBlueprints.Any(x => x.SubtypeId == currentItem.SubtypeId.ToString())){
-        var blueprint = Items[0].BlueprintId;
+    var currentItem = items[0].BlueprintId;
+    if (currentItem.TypeId.ToString() != "MyObjectBuilder_BlueprintDefinition" && !learnedBlueprints.Any(x => x.SubtypeId == currentItem.SubtypeId.ToString()))
+    {
+        var blueprint = items[0].BlueprintId;
 
-        var learnedBlueprint = new LearnedBlueprint{
+        var learnedBlueprint = new LearnedBlueprint
+        {
             TypeId = blueprint.TypeId.ToString(),
             SubtypeId = blueprint.SubtypeId.ToString()
         };
@@ -945,8 +918,9 @@ public void LearnBlueprint(IMyAssembler assembler, List<LearnedBlueprint> learne
         var data = "";
         foreach (var bp in learnedBlueprints)
         {
-            data += bp.TypeId + ";" + bp.SubtypeId + "\n";
+            data += $"{bp.TypeId};{bp.SubtypeId}\n";
         }
+
         Me.CustomData = data;
     }
     //Echo("Learn Blueprint method instructions: " + Runtime.CurrentInstructionCount.ToString());
@@ -954,16 +928,24 @@ public void LearnBlueprint(IMyAssembler assembler, List<LearnedBlueprint> learne
 
 public void LoadLearnedBlueprints()
 {
-    if(lcdAssemblerStreamData.Count > 0){
-        foreach ( KeyValuePair<string, int> pair in lcdAssemblerStreamData){
-            var _LearnedBlueprint = new LearnedBlueprint{
-                TypeId = "MyObjectBuilder_BlueprintDefinition",
-                SubtypeId = pair.Key
-            };
-            lBlueprints.Add(_LearnedBlueprint);
+    // Load learned blueprints from LCD data
+    if (lcdAssemblerStreamData.Count > 0)
+    {
+        foreach (var pair in lcdAssemblerStreamData)
+        {
+            if (!lBlueprints.Any(bp => bp.SubtypeId == pair.Key))
+            {
+                var learnedBlueprint = new LearnedBlueprint
+                {
+                    TypeId = "MyObjectBuilder_BlueprintDefinition",
+                    SubtypeId = pair.Key
+                };
+                lBlueprints.Add(learnedBlueprint);
+            }
         }
     }
 
+    // Load learned blueprints from CustomData
     var data = Me.CustomData;
     if (string.IsNullOrEmpty(data))
     {
@@ -984,8 +966,11 @@ public void LoadLearnedBlueprints()
             continue;
         }
 
-        if(lBlueprints.Any(bp => bp.SubtypeId == values[1])) break;
-        
+        if (lBlueprints.Any(bp => bp.SubtypeId == values[1]))
+        {
+            break;
+        }
+
         var learnedBlueprint = new LearnedBlueprint
         {
             TypeId = values[0],
@@ -993,5 +978,6 @@ public void LoadLearnedBlueprints()
         };
         lBlueprints.Add(learnedBlueprint);
     }
+
     //Echo("Load Learned Blueprints method instructions: " + Runtime.CurrentInstructionCount.ToString());
 }
