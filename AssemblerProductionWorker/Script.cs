@@ -7,6 +7,14 @@
 //  Display production queue and estimated completion time in dd:hh:mm:ss format on LCD display: Planned
 //  Allow for queuing of multiple items simultaneously and assign priority based on need: In Progress
 //  Store production statistics in the Storage property: Planned
+//  Make an DilithiumMatrix production separate optional method -> This is only useful with DeuteriumRefineryManager script running
+
+//  To set up your grid, follow these basic steps:
+
+//  1.  Build Assemblers and Cargo Containers on your grid.
+//  2.  If you have enemies who have built Assemblers on your grid, make sure they are set to share with all players.
+//  3.  If enemies have built Assemblers on your grid, you will also need to build a Cargo Container that is connected to all of the enemy Assemblers using conveyors. This Cargo Container should be set to share with all players.
+//  4.  Make sure to name the Cargo Containers and Assemblers according to the names listed in the Config section, or change the names in the Config section to match your chosen names.
 
 // Lists
 List<IMyCargoContainer> containersList = new List<IMyCargoContainer>();
@@ -485,6 +493,10 @@ int runtimeLagger = 0;
 int runtimeLaggerDelay = 5; // This variable is a timer with a default interval of 5 seconds. If the timer detects activity during the 5-second interval, it will remain at that interval. However, if no activity is detected, the timer will switch to a 20-second interval to conserve resources. This timer is used to limit resource drainage.
 Logger _logger;
 
+// Config || Replace variable values at your discretion ||
+string containerTransferEnemyAssemblersCustomName = "DilithiumMatrix Cargo"; // Every Transfer Enemy Assembler Cargo Container CustomName need to hame this in their name 
+string assemblersName = "Assembler"; // Every Assembler CustomName need to have this in their name
+
 public Program(){
     Runtime.UpdateFrequency = UpdateFrequency.Update100;
     _logger = new Logger();
@@ -492,14 +504,13 @@ public Program(){
     GridTerminalSystem.GetBlocksOfType(containersList, b => b.CubeGrid == Me.CubeGrid);
     GridTerminalSystem.GetBlocksOfType(lcdPanelList, b => b.CubeGrid == Me.CubeGrid);
 
-    GridTerminalSystem.GetBlocksOfType(containerDilMatrixList, b => b.CustomName.Contains("DilithiumMatrix Cargo"));
+    GridTerminalSystem.GetBlocksOfType(containerDilMatrixList, b => b.CustomName.Contains(containerTransferEnemyAssemblersCustomName));
     // Move to an method lazy mate...
-    assemblers = assemblers.Where(assembler => assembler.CustomName.Contains("Assembler")).ToList();
+    assemblers = assemblers.Where(assembler => assembler.CustomName.Contains(assemblersName)).ToList();
 
     LoadDataStream();
     LoadLearnedBlueprints();
 }
-
 public void Main(string argument, UpdateType updateSource)
 {
     // Check for runtime lags
@@ -536,6 +547,7 @@ public void Main(string argument, UpdateType updateSource)
         List<IMyAssembler> enemyAssemblers = assemblers.Where(assembler => assembler.OwnerId != Me.OwnerId).ToList();
         enemyAssemblers.ForEach(assembler =>
         {
+            
             var items = new List<MyInventoryItem>();
             assembler.GetInventory(1).GetItems(items);
 
@@ -638,13 +650,117 @@ public class Logger{
 int GetPriorityComponentBP(){
     return 1;
 }
-/*
-// This Method will be for finding and transfering correct amount of needed materials for Current Queue Item
-// NEEDS REWRITING!!!!
-// Get the amount of needed materials for queue item
-void TransferItemsNeededForQueue(){
+
+void TransferMaterialsToAssemblerInputInventory(IMyAssembler assembler, IMyCargoContainer container, int slot, double amountToTransfer, MyInventoryItem item)
+{
+    try
+    {
+        var containerE = containerDilMatrixList
+            .Find(cont => cont.GetInventory(0).CanItemsBeAdded((VRage.MyFixedPoint)amountToTransfer, item.Type));
+
+        container.GetInventory(0).TransferItemTo(containerE.GetInventory(0), slot, null, true, (VRage.MyFixedPoint)amountToTransfer);
+        
+        // Not Working Properly doesn't execute the transfer to Assemblers Input Inventory
+        var eer1 = new List<MyInventoryItem>();
+        containerE.GetInventory(0).GetItems(eer1);
+        var index = eer1.IndexOf(item);
+        containerE.GetInventory(0).TransferItemTo(assembler.GetInventory(0), index, null, true, (VRage.MyFixedPoint)(amountToTransfer / (double)assemblers.Count));
+    }
+    catch(Exception ex)
+    {
+        Echo($"Error: {ex}");
+    }
 }
-*/
+
+Dictionary<IMyCargoContainer, double> FindContainersWithMaterials(Dictionary<string, double> materials, double amount, IMyAssembler assembler)
+{
+    var containersWithMaterials = new Dictionary<IMyCargoContainer, double>();
+    var materialsTemp = materials.ToDictionary(kvp => kvp.Key.Replace(" ", ""), kvp => kvp.Value * amount);
+
+    foreach (var container in containersList)
+    {
+        if (container.GetInventory(0).CurrentVolume == 0)
+        {
+            break;
+        }
+
+        var items = new List<MyInventoryItem>();
+        container.GetInventory(0).GetItems(items);
+
+        foreach (var item in items)
+        {
+            if (item.Type.TypeId == "MyObjectBuilder_Ingot")
+            {
+                var materialName = materialsTemp.Keys.FirstOrDefault(k => k.Contains(item.Type.SubtypeId));
+                    double amountNeeded = 0.00;
+                if (materialName != null && materialsTemp.TryGetValue(materialName, out amountNeeded))
+                {
+                    Echo($"{item.Type} Item Found");
+                    Echo($"{item.Amount}/{amountNeeded}");
+
+                    var itemSlotId = items.IndexOf(item);
+
+                    if ((double)item.Amount >= amountNeeded)
+                    {
+                        Echo("Hit AmountNeeded!");
+                        TransferMaterialsToAssemblerInputInventory(assembler, container, itemSlotId, amountNeeded, item);
+                        containersWithMaterials.Add(container, amountNeeded);
+                        return containersWithMaterials;
+                    }
+                    else
+                    {
+                        Echo("Hit item.Amount!");
+                        TransferMaterialsToAssemblerInputInventory(assembler, container, itemSlotId, (double)item.Amount, item);
+                        containersWithMaterials.Add(container, (double)item.Amount);
+                        materialsTemp[materialName] -= (double)item.Amount;
+                        amountNeeded -= (double)item.Amount;
+                    }
+                }
+            }
+        }
+    }
+
+    return containersWithMaterials;
+}
+
+void TransferItemsNeededForQueue(IMyAssembler assembler)
+{
+    if (assembler.IsProducing)
+    {
+        return;
+    }
+    
+    var assemblerInventory = assembler.GetInventory(0);
+    var assemblerInventoryMax = assemblerInventory.MaxVolume;
+    var assemblerInventoryCurrent = assemblerInventory.CurrentVolume;
+    
+    var queueItems = new List<MyProductionItem>();
+    assembler.GetQueue(queueItems);
+    
+    if (queueItems.Count == 0)
+    {
+        return;
+    }
+    
+    var itemFromQueue = _itemBlueprintResult.FirstOrDefault(IB => IB.name.Replace(" ", "").Contains(queueItems[0].BlueprintId.SubtypeId.ToString()));
+    
+    if (itemFromQueue.name == null)
+    {
+        return;
+    }
+    
+    var totalSpaceTakes = 500.00 * assemblers.Count; // It should be worth 500 items times amount of assemblers
+    if (totalSpaceTakes > (double)queueItems[0].Amount)
+    {
+        totalSpaceTakes = (double)queueItems[0].Amount;
+    }
+    
+    if ((double)assemblerInventoryCurrent < (double)assemblerInventoryMax)
+    {
+        FindContainersWithMaterials(itemFromQueue.materials, totalSpaceTakes, assembler);
+    }
+}
+
 void MainAssembly()
 {
     ManageQueueAssembly();
@@ -669,7 +785,7 @@ void MainAssembly()
         else
         {
             CheckAndRefreshAssemblerQueue(assembler);
-
+            TransferItemsNeededForQueue(assembler);
             if (assembler.IsProducing)
             {
                 runtimeLaggerDelay = 5;
