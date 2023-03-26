@@ -64,10 +64,16 @@ void Main(string argument)
         refinery.GetInventory(1).GetItems(items);
         if (items.Count > 0)
         {
-            IMyCargoContainer emptyContainer = GetEmptyContainer();
-            if (emptyContainer != null)
-            {
-                MoveRefinedToContainer(refinery, emptyContainer);
+            if(container.GetInventory(0).CurrentVolume < 0.8){
+                MoveRefinedToContainer(refinery, container);
+            }
+            else{
+
+                IMyCargoContainer emptyContainer = GetEmptyContainer();
+                if (emptyContainer != null)
+                {
+                    MoveRefinedToContainer(refinery, emptyContainer);
+                }
             }
         }
     }
@@ -139,23 +145,6 @@ void FindNonEmptyOreCargoContainers()
         container.GetInventory(0).GetItems(items);
         return items.Any(item => item.Type.TypeId == "MyObjectBuilder_Ore");
     }).ToList();
-}
-
-IMyCargoContainer FindCargoContainer()
-{
-    foreach (var container in filledContainerList)
-    {
-        var items = new List<MyInventoryItem>();
-        container.GetInventory(0).GetItems(items);
-
-        if (items.Count > 0 && items.Any(item => item.Type.SubtypeId.Contains(oreToRefine[0])))
-        {
-            Echo("Found!");
-            return container;
-        }
-    }
-
-    return null;
 }
 
 IMyCargoContainer FindCargoContainerWithOreToRefine()
