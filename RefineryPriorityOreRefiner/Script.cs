@@ -4,6 +4,7 @@
 
 // TODO:
 // - Show up how much refined in the session and total (This needs storing permanent - can it be done??)
+// - 70% - refine 1st ore, 20% - refine 2nd ore, 10% - refine 3rd ore. This will activate if oreToRefine list has more than 1 set ore and there is ore different to the 1st ore in priority.
 
 // Lists
 List<IMyRefinery> refineryList = new List<IMyRefinery>();
@@ -36,8 +37,49 @@ Program()
 {
   // Configure this program to run the Main method every 100 update ticks
     Runtime.UpdateFrequency = UpdateFrequency.Update100;
-    GridTerminalSystem.GetBlocksOfType(refineryList, b => b.CubeGrid == Me.CubeGrid);
+    GridTerminalSystem.GetBlocksOfType(refineryList, b => b.CubeGrid == Me.CubeGrid && !StringSplitter(b.DetailedInfo)[0].Contains("Deuterium"));
     GridTerminalSystem.GetBlocksOfType(containerList, b => b.CubeGrid == Me.CubeGrid);
+}
+
+// Works only for Type: 
+// TODO:
+// - All keys will get Substring into result
+List<string> StringSplitter(string text){
+
+    if(text.Length == 0) return new List<string>();
+
+    List<string> result = new List<string>();
+
+    List<string> keys = new List<string>(){
+        {"Type:"},
+        {"Max Required Input:"},
+        {"Required Input:"},
+        {"Productivity:"},
+        {"Effectiveness:"},
+        {"Power Efficiency:"},
+        {"Used upgrade module slots:"}
+    };
+
+    for (int i = 0; i < keys.Count; i++)
+    {
+        if(text.Substring(0).StartsWith(keys[i]))
+        {
+            int startIndex = 0 + keys[i].Length;
+            int endIndex = 0;
+            if(i == keys.Count-1)
+            {
+                endIndex = text.Length;
+            }else{
+                endIndex = text.IndexOf(keys[i+1]);
+            }
+            //Echo($"String: {text.Substring(startIndex, endIndex - startIndex)}");
+            result.Add(text.Substring(startIndex, endIndex - startIndex));
+        }
+        else{
+            break;
+        }
+    }
+    return result;
 }
 
 void Main(string argument)
@@ -57,24 +99,22 @@ void Main(string argument)
 
         if (container != null)
         {
-            MoveOreToRefinery(container, refinery, oreToRefine[0]);
-            MoveRefinedToContainer(refinery, container);
+            try{
+                MoveOreToRefinery(container, refinery, oreToRefine[0]);
+                refinery.CustomName = $"Refinery {refinery.IsProducing} - {oreToRefine[0]}";
+            }
+            catch (Exception ex)
+            {
+                Echo($"Error with moving ore to refinery: {ex}");
+            }
+
+            MoveRefinedToContainer(refinery);
         }
         var items = new List<MyInventoryItem>();
         refinery.GetInventory(1).GetItems(items);
         if (items.Count > 0)
         {
-            if(container.GetInventory(0).CurrentVolume < 0.8){
-                MoveRefinedToContainer(refinery, container);
-            }
-            else{
-
-                IMyCargoContainer emptyContainer = GetEmptyContainer();
-                if (emptyContainer != null)
-                {
-                    MoveRefinedToContainer(refinery, emptyContainer);
-                }
-            }
+            MoveRefinedToContainer(refinery);
         }
     }
 }
@@ -112,7 +152,7 @@ void MoveOreToRefinery(IMyCargoContainer container, IMyRefinery refinery, string
 }
 
 // Define a method to move refined items to the cargo container
-void MoveRefinedToContainer(IMyRefinery refinery, IMyCargoContainer container)
+void MoveRefinedToContainer(IMyRefinery refinery)
 {
     var refineryInventory = refinery.GetInventory(1);
     var refineryItems = new List<MyInventoryItem>();
@@ -125,14 +165,23 @@ void MoveRefinedToContainer(IMyRefinery refinery, IMyCargoContainer container)
         var targetInventory = targetContainer.GetInventory(0);
         var amountToTransfer = refineryItems[0].Amount;
         var index = 0;
-        var targetSlot = 0;
+        var transferSuccess = false;
         var sourceInventory = refineryInventory;
+        var targetItems = new List<MyInventoryItem>();
+        targetInventory.GetItems(targetItems);
+        var targetItem = targetItems.Find(item => item.Type == refineryItems[0].Type);
+        if(targetItem != null)
+        {
+            transferSuccess = targetInventory.TransferItemFrom(sourceInventory, index, targetItems.IndexOf(targetItem));
+        }
+        else
+        {
+            transferSuccess = targetInventory.TransferItemFrom(sourceInventory, index, 0);
+        }
 
-        var transferSuccess = targetInventory.TransferItemFrom(sourceInventory, index, targetSlot);
-        
         if (!transferSuccess)
         {
-            return;
+            MoveRefinedToContainer(refinery);
         }
     }
 }

@@ -415,6 +415,9 @@ List<ItemBlueprint> _itemBlueprintResult = new List<ItemBlueprint> {
         {"Silver Ingot", 0.22},
         {"Duranium Ingot", 0.33}
     }),
+    new ItemBlueprint("Dilithium Matrix", new Dictionary<string, double>(){
+        {"Refined Dilithium", 3.33}
+    }),
     new ItemBlueprint("Matter '\' Anti-Matter Chamber", new Dictionary<string, double>(){
         {"Tritanium Ingot", 5.00},
         {"Silicon Wafer", 16.67},
@@ -487,6 +490,7 @@ List<ItemBlueprint> _itemBlueprintResult = new List<ItemBlueprint> {
 Dictionary<string, int> lcdAssemblerStreamData = new Dictionary<string, int>();
 Dictionary<MyDefinitionId, int> queueItems = new Dictionary<MyDefinitionId, int>();
 Dictionary<string, int> currentItems = new Dictionary<string, int>();
+Dictionary<string, int> currentIngots = new Dictionary<string, int>();
 
 // variables
 int runtimeLagger = 0;
@@ -532,6 +536,7 @@ public void Main(string argument, UpdateType updateSource)
 
         // Manage items in containers
         ManageCurrentItems();
+        ManageCurrentIngotInventory();
 
         // Handle assembler queues
         try
@@ -556,7 +561,31 @@ public void Main(string argument, UpdateType updateSource)
                 var container = containerDilMatrixList.Find(cont => cont.GetInventory(0).CanItemsBeAdded(item.Amount, item.Type));
                 if (container != null)
                 {
-                    Echo($"{container.GetInventory(0).TransferItemFrom(assembler.GetInventory(1), 0, null, true, item.Amount)}");
+                    //Echo($"{container.GetInventory(0).TransferItemFrom(assembler.GetInventory(1), 0, null, true, item.Amount)}");
+                    container.GetInventory(0).TransferItemFrom(assembler.GetInventory(1), 0, null, true, item.Amount);
+                    containersList.Any(cont => {
+                        if(cont != container){
+                            var itemsCont = new List<MyInventoryItem>();
+                            cont.GetInventory(0).GetItems(itemsCont);
+
+                             var itemContFound = itemsCont.Find(itemCont => itemCont.Type == item.Type);
+
+                            var itemsContainer = new List<MyInventoryItem>();
+                            container.GetInventory(0).GetItems(itemsContainer);
+
+                            var itemFoundContainer = itemsContainer.Find( itemContainer => itemContainer.Type == item.Type);
+
+                           
+
+                            if(itemContFound != null && cont.GetInventory(0).CanItemsBeAdded(itemFoundContainer.Amount, itemFoundContainer.Type)){
+                                var index = itemsContainer.IndexOf(itemFoundContainer);
+                                //Echo($"Transfer Completed? {cont.GetInventory(0).TransferItemFrom(container.GetInventory(0), index, null, true, itemFoundContainer.Amount)}");
+                                cont.GetInventory(0).TransferItemFrom(container.GetInventory(0), index, null, true, itemFoundContainer.Amount);
+                                return true;
+                            }
+                        } 
+                        return false;
+                    });
                 }
             });
         });
@@ -657,14 +686,26 @@ void TransferMaterialsToAssemblerInputInventory(IMyAssembler assembler, IMyCargo
     {
         var containerE = containerDilMatrixList
             .Find(cont => cont.GetInventory(0).CanItemsBeAdded((VRage.MyFixedPoint)amountToTransfer, item.Type));
+        if(containerE == null){
+            Echo("Container not found!");
+            return;
+        }
 
+        Echo("Pass Find Container!");
         container.GetInventory(0).TransferItemTo(containerE.GetInventory(0), slot, null, true, (VRage.MyFixedPoint)amountToTransfer);
-        
+        Echo("Pass Transfer Item to Container!");
         // Not Working Properly doesn't execute the transfer to Assemblers Input Inventory
+        if(assembler == null)
+        {
+            Echo("Assembler == null!!!!");
+            return;
+        }
         var eer1 = new List<MyInventoryItem>();
         containerE.GetInventory(0).GetItems(eer1);
-        var index = eer1.IndexOf(item);
-        containerE.GetInventory(0).TransferItemTo(assembler.GetInventory(0), index, null, true, (VRage.MyFixedPoint)(amountToTransfer / (double)assemblers.Count));
+        var itemToTransfer = eer1.Find(itemE => itemE.Type == item.Type);
+        var index = eer1.IndexOf(itemToTransfer);
+        containerE.GetInventory(0).TransferItemTo(assembler.GetInventory(0), index, null, true, (VRage.MyFixedPoint)((double)itemToTransfer.Amount / (double)assemblers.Count));
+        Echo("Pass Transfer from Container to Assembler!");
     }
     catch(Exception ex)
     {
@@ -734,15 +775,15 @@ void TransferItemsNeededForQueue(IMyAssembler assembler)
     var assemblerInventoryMax = assemblerInventory.MaxVolume;
     var assemblerInventoryCurrent = assemblerInventory.CurrentVolume;
     
-    var queueItems = new List<MyProductionItem>();
-    assembler.GetQueue(queueItems);
+    var queueItemsL = new List<MyProductionItem>();
+    assembler.GetQueue(queueItemsL);
     
-    if (queueItems.Count == 0)
+    if (queueItemsL.Count == 0)
     {
         return;
     }
     
-    var itemFromQueue = _itemBlueprintResult.FirstOrDefault(IB => IB.name.Replace(" ", "").Contains(queueItems[0].BlueprintId.SubtypeId.ToString()));
+    var itemFromQueue = _itemBlueprintResult.FirstOrDefault(IB => IB.name.Replace(" ", "").Contains(queueItemsL[0].BlueprintId.SubtypeId.ToString()));
     
     if (itemFromQueue.name == null)
     {
@@ -750,15 +791,46 @@ void TransferItemsNeededForQueue(IMyAssembler assembler)
     }
     
     var totalSpaceTakes = 500.00 * assemblers.Count; // It should be worth 500 items times amount of assemblers
-    if (totalSpaceTakes > (double)queueItems[0].Amount)
+    if (totalSpaceTakes > (double)queueItemsL[0].Amount)
     {
-        totalSpaceTakes = (double)queueItems[0].Amount;
+        totalSpaceTakes = (double)queueItemsL[0].Amount;
     }
     
     if ((double)assemblerInventoryCurrent < (double)assemblerInventoryMax)
     {
         FindContainersWithMaterials(itemFromQueue.materials, totalSpaceTakes, assembler);
     }
+}
+
+bool CheckForAbilityToCraftWithMaterials(string key){
+    
+    var itemFromQueue = _itemBlueprintResult.FirstOrDefault(IB => IB.name.Replace(" ", "").Contains(key));
+    //Echo($"{itemFromQueue.name} / {itemFromQueue.materials.Count}");
+    if(itemFromQueue.name == null) return false;
+    //Echo("Passed Check!");
+    if(currentItems.Count == 0) ManageCurrentItems();
+    //Echo(currentItems.Count.ToString());
+    int count = 0;
+    foreach (var cI in currentIngots){
+        try{
+            //Echo(cI.Key);
+            var mat = itemFromQueue.materials.FirstOrDefault(IB => IB.Key.Replace(" ", "").Contains(cI.Key));
+            //Echo($"{mat.Key}/{mat.Value}");
+            count++;
+            if(mat.Key == null) continue;
+            if(!mat.Key.Replace(" ", "").Contains(cI.Key)) continue;
+            //Echo("Found Material Return True!");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Echo($"Checking for mat avai for queue failed: {ex}");
+            Echo(count.ToString());
+        }
+    }
+    //Echo(count.ToString());
+    return false;
+            
 }
 
 void MainAssembly()
@@ -776,10 +848,13 @@ void MainAssembly()
                 runtimeLaggerDelay = 20;
                 return;
             }
-
             foreach (var pair in queueItems)
             {
-                assembler.AddQueueItem(pair.Key, (decimal)pair.Value);
+                //Echo($"{pair.Key}/{pair.Value}");
+                if(CheckForAbilityToCraftWithMaterials(pair.Key.SubtypeId.ToString()) && pair.Value > 0){
+                    //Echo("Passed he checs");
+                    assembler.AddQueueItem(pair.Key, (decimal)pair.Value);
+                }
             }
         }
         else
@@ -789,10 +864,14 @@ void MainAssembly()
             if (assembler.IsProducing)
             {
                 runtimeLaggerDelay = 5;
+                var queItems = new List<MyProductionItem>();
+                assembler.GetQueue(queItems);
+                assembler.CustomName = $"{assemblersName} - {(assembler.IsProducing? "Active" : "Inactive")} - {queItems[0].BlueprintId.SubtypeId.ToString()}";
             }
             else
             {
                 runtimeLaggerDelay = 20;
+                assembler.CustomName = $"{assemblersName} - {(assembler.IsProducing? "Active" : "Inactive")}";
             }
 
             ClearAssemblyLine(assembler);
@@ -818,12 +897,12 @@ void CheckAndRefreshAssemblerQueue(IMyAssembler assembler)
         var queuedAmount = queueItems[item.BlueprintId];
         var currentAmount = currentItems[item.BlueprintId.SubtypeId.ToString()];
 
-        if (item.Amount <= queuedAmount - 150 || item.Amount >= queuedAmount + 150 ||
+        if (item.Amount <= queuedAmount - 250 || item.Amount >= queuedAmount + 250 ||
             currentAmount > lcdAssemblerStreamData[item.BlueprintId.SubtypeId.ToString()])
         {
             assembler.ClearQueue();
 
-            if (queueItems.Count <= 0)
+            if (queueItems.Count == 0)
             {
                 queueItems.Remove(queueItems.First().Key);
             }
@@ -840,8 +919,18 @@ void ClearAssemblyLine(IMyAssembler assembler)
     // Transfer each item to the first container that can receive it
     foreach (var item in items)
     {
-        var targetContainer = containersList.Find(containerOut => containerOut.GetInventory(0).CanItemsBeAdded(item.Amount, item.Type));
-        assembler.GetInventory(1).TransferItemTo(targetContainer.GetInventory(0), 0, null, true, item.Amount);
+        containersList.Any(cont => {
+            var itemsCont = new List<MyInventoryItem>();
+            cont.GetInventory(0).GetItems(itemsCont);
+            var itemContFound = itemsCont.Find(itemCont => itemCont.Type == item.Type);
+            if(itemContFound != null && cont.GetInventory(0).CanItemsBeAdded(item.Amount, item.Type)){
+                var index = items.IndexOf(item);
+                cont.GetInventory(0).TransferItemFrom(assembler.GetInventory(1), index, null, true, item.Amount);
+                //Echo($"Clearing {assembler.CustomName} Status: {cont.GetInventory(0).TransferItemFrom(assembler.GetInventory(1), index, null, true, item.Amount)}");
+                return true;
+            }
+            return false;
+        });
     }
 
     // Log instructions count
@@ -990,6 +1079,34 @@ public void ManageCurrentItems()
                 else
                 {
                     currentItems[item.Type.SubtypeId] = (int)item.Amount;
+                }
+            }
+        }
+    }
+    //Echo("Manage Current Items method instructions: " + Runtime.CurrentInstructionCount.ToString());
+}
+
+public void ManageCurrentIngotInventory()
+{
+    currentIngots.Clear();
+    foreach (var container in containersList)
+    {
+        var items = new List<MyInventoryItem>();
+        container.GetInventory(0).GetItems(items);
+        if (items.Count == 0)
+            continue;
+        foreach (var item in items)
+        {
+            if (item.Type.TypeId == "MyObjectBuilder_Ingot")
+            {
+                int amount = 0;
+                if (currentIngots.TryGetValue(item.Type.SubtypeId, out amount))
+                {
+                    currentIngots[item.Type.SubtypeId] = amount + (int)item.Amount;
+                }
+                else
+                {
+                    currentIngots[item.Type.SubtypeId] = (int)item.Amount;
                 }
             }
         }
