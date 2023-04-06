@@ -2,12 +2,12 @@
 // Created by xSupeFly
 // Discord: xSupeFly#2911
 
+//  Rewrite the code for assembler transfer due to the fact that the assemblers Me.OwnerId is not the same as the assembler owner id (enemy owned assemblers) -> In Progress (Critical) 
 //  Queue items for production using LCD display: Done
-//  Fill assemblers with required components and move excess components to available containers: In Progress
 //  Display production queue and estimated completion time in dd:hh:mm:ss format on LCD display: Planned
 //  Allow for queuing of multiple items simultaneously and assign priority based on need: In Progress
 //  Store production statistics in the Storage property: Planned
-//  Make an DilithiumMatrix production separate optional method -> This is only useful with DeuteriumRefineryManager script running
+//  Make an DilithiumMatrix production separate optional method -> This is only useful with DeuteriumRefineryManager script running: Planned
 
 //  To set up your grid, follow these basic steps:
 
@@ -528,7 +528,7 @@ public void Main(string argument, UpdateType updateSource)
         // Reset runtime lagger and increment script runs
         runtimeLagger = 0;
         _logger.SetRuns(_logger.GetRuns() + 1);
-
+        _logger.AddLogItem(new Log("Main", "Script run: " + _logger.GetRuns().ToString()));
         // Handle LCD display
         var lcdPanel = lcdPanelList.Find(panel => panel.CustomName == "LCD Assembler Manager Main");
         ReadLCDData(lcdPanel, lcdAssemblerStreamData);
@@ -589,17 +589,23 @@ public void Main(string argument, UpdateType updateSource)
                 }
             });
         });
-
-        // Output runtime information to LCD display
-        _logger.SetRuntime(Runtime.TimeSinceLastRun);
-        Echo(Runtime.MaxInstructionCount.ToString());
-        Echo("Main method instructions (Main Loop): " + Runtime.CurrentInstructionCount.ToString());
-        Echo(_logger.GetRuntime().ToString());
-        Echo("Script runs: " + _logger.GetRuns());
-
-        // Debug output
-        Echo("Assemblers: " + assemblers.Count.ToString());
     }
+    Echo(_logger.GetLoggerLog().Count.ToString());
+    // Output runtime information to LCD display
+    _logger.SetRuntime(Runtime.TimeSinceLastRun);
+    Echo(Runtime.MaxInstructionCount.ToString());
+    Echo("Main method instructions (Main Loop): " + Runtime.CurrentInstructionCount.ToString());
+    Echo(_logger.GetRuntime().ToString());
+    Echo("Script runs: " + _logger.GetRuns());
+
+    _logger.GetLoggerLogLast().ForEach(log => Echo(log.LogType + ": " + log.LogMsg));
+
+    // Debug output
+    Echo("Assemblers: " + assemblers.Count.ToString());
+    Echo("Containers: " + containersList.Count.ToString());
+    Echo($"Containers with Ingots: {containersList.FindAll(cont => cont.CustomName.Contains("Ingot")).Count}");
+    if(_logger.GetLoggerLog().Count > 100)
+        _logger.ClearOldLogs();
 }
 
 
@@ -646,6 +652,7 @@ public class Logger{
     private List<Log> loggerLog = new List<Log>();
     private TimeSpan runtime = TimeSpan.Zero;
     private int runs = 0;
+    private int _maxLogs = 60;
 
     public Logger(){
     } 
@@ -658,8 +665,16 @@ public class Logger{
         return this.loggerLog;
     }
 
+    public List<Log> GetLoggerLogLast(){
+        return this.loggerLog.Take(_maxLogs).ToList();
+    }
+
     public TimeSpan GetRuntime(){
         return this.runtime;
+    }
+
+    public void ClearOldLogs(){
+        this.loggerLog.RemoveRange(0, this.loggerLog.Count - 100);
     }
 
     public void SetRuntime(TimeSpan value){
@@ -684,31 +699,41 @@ void TransferMaterialsToAssemblerInputInventory(IMyAssembler assembler, IMyCargo
 {
     try
     {
-        var containerE = containerDilMatrixList
-            .Find(cont => cont.GetInventory(0).CanItemsBeAdded((VRage.MyFixedPoint)amountToTransfer, item.Type));
-        if(containerE == null){
-            Echo("Container not found!");
-            return;
-        }
-
-        Echo("Pass Find Container!");
-        container.GetInventory(0).TransferItemTo(containerE.GetInventory(0), slot, null, true, (VRage.MyFixedPoint)amountToTransfer);
-        Echo("Pass Transfer Item to Container!");
-        // Not Working Properly doesn't execute the transfer to Assemblers Input Inventory
-        if(assembler == null)
+        if(assembler.OwnerId != Me.OwnerId)
         {
-            Echo("Assembler == null!!!!");
-            return;
+            var containerE = containerDilMatrixList
+                .Find(cont => cont.GetInventory(0).CanItemsBeAdded((VRage.MyFixedPoint)amountToTransfer, item.Type));
+            if(containerE == null){
+                _logger.AddLogItem(new Log("Error", "Container not found!"));
+                return;
+            }
+            _logger.AddLogItem(new Log("Info", "Container found!"));
+
+            container.GetInventory(0).TransferItemTo(containerE.GetInventory(0), slot, null, true, (VRage.MyFixedPoint)amountToTransfer);
+            _logger.AddLogItem(new Log("Info", "Transfer from Container to Container!"));
+
+            // Not Working Properly doesn't execute the transfer to Assemblers Input Inventory
+            if(assembler == null)
+            {
+                _logger.AddLogItem(new Log("Error", "Assembler == null!!!!"));
+                return;
+            }
+            var eer1 = new List<MyInventoryItem>();
+            containerE.GetInventory(0).GetItems(eer1);
+            var itemToTransfer = eer1.Find(itemE => itemE.Type == item.Type);
+            var index = eer1.IndexOf(itemToTransfer);
+            containerE.GetInventory(0).TransferItemTo(assembler.GetInventory(0), index, null, true, (VRage.MyFixedPoint)((double)itemToTransfer.Amount / (double)assemblers.Count));
+            _logger.AddLogItem(new Log("Info", "Transfer from Container to Assembler!"));
         }
-        var eer1 = new List<MyInventoryItem>();
-        containerE.GetInventory(0).GetItems(eer1);
-        var itemToTransfer = eer1.Find(itemE => itemE.Type == item.Type);
-        var index = eer1.IndexOf(itemToTransfer);
-        containerE.GetInventory(0).TransferItemTo(assembler.GetInventory(0), index, null, true, (VRage.MyFixedPoint)((double)itemToTransfer.Amount / (double)assemblers.Count));
-        Echo("Pass Transfer from Container to Assembler!");
+        else
+        {
+            container.GetInventory(0).TransferItemTo(assembler.GetInventory(0), slot, null, true, (VRage.MyFixedPoint)amountToTransfer);
+            _logger.AddLogItem(new Log("Info", "Transfer from Container to Assembler!"));
+        }
     }
     catch(Exception ex)
     {
+        _logger.AddLogItem(new Log("Error", ex.ToString()));
         Echo($"Error: {ex}");
     }
 }
@@ -717,40 +742,39 @@ Dictionary<IMyCargoContainer, double> FindContainersWithMaterials(Dictionary<str
 {
     var containersWithMaterials = new Dictionary<IMyCargoContainer, double>();
     var materialsTemp = materials.ToDictionary(kvp => kvp.Key.Replace(" ", ""), kvp => kvp.Value * amount);
-
+    _logger.AddLogItem(new Log("Info", $"Curr Assembler: {assembler.OwnerId} Me: {Me.OwnerId}"));
     foreach (var container in containersList)
     {
         if (container.GetInventory(0).CurrentVolume == 0)
         {
+            //_logger.AddLogItem(new Log("Info", "Container is empty!"));
             break;
         }
 
         var items = new List<MyInventoryItem>();
         container.GetInventory(0).GetItems(items);
-
+        _logger.AddLogItem(new Log("Info", $"Container has items! {items.Count}"));
         foreach (var item in items)
         {
             if (item.Type.TypeId == "MyObjectBuilder_Ingot")
             {
+                _logger.AddLogItem(new Log("Info", "Container has ingots!"));
                 var materialName = materialsTemp.Keys.FirstOrDefault(k => k.Contains(item.Type.SubtypeId));
                     double amountNeeded = 0.00;
                 if (materialName != null && materialsTemp.TryGetValue(materialName, out amountNeeded))
                 {
-                    Echo($"{item.Type} Item Found");
-                    Echo($"{item.Amount}/{amountNeeded}");
-
                     var itemSlotId = items.IndexOf(item);
 
                     if ((double)item.Amount >= amountNeeded)
                     {
-                        Echo("Hit AmountNeeded!");
+                        _logger.AddLogItem(new Log("Info", "Container has enough materials!"));
                         TransferMaterialsToAssemblerInputInventory(assembler, container, itemSlotId, amountNeeded, item);
                         containersWithMaterials.Add(container, amountNeeded);
                         return containersWithMaterials;
                     }
                     else
                     {
-                        Echo("Hit item.Amount!");
+                        _logger.AddLogItem(new Log("Info", "Container has not enough materials!"));
                         TransferMaterialsToAssemblerInputInventory(assembler, container, itemSlotId, (double)item.Amount, item);
                         containersWithMaterials.Add(container, (double)item.Amount);
                         materialsTemp[materialName] -= (double)item.Amount;
@@ -758,6 +782,7 @@ Dictionary<IMyCargoContainer, double> FindContainersWithMaterials(Dictionary<str
                     }
                 }
             }
+            //_logger.AddLogItem(new Log("Info", "Container has doesn't have Ingots!"));
         }
     }
 
@@ -768,8 +793,10 @@ void TransferItemsNeededForQueue(IMyAssembler assembler)
 {
     if (assembler.IsProducing)
     {
+       // _logger.AddLogItem(new Log("Info", $"{assembler.CustomName} is producing!"));
         return;
     }
+    //_logger.AddLogItem(new Log("Info", $"{assembler.CustomName} is not producing!"));
     
     var assemblerInventory = assembler.GetInventory(0);
     var assemblerInventoryMax = assemblerInventory.MaxVolume;
@@ -780,6 +807,7 @@ void TransferItemsNeededForQueue(IMyAssembler assembler)
     
     if (queueItemsL.Count == 0)
     {
+        //_logger.AddLogItem(new Log("Info", $"{assembler.CustomName} queue is empty!"));
         return;
     }
     
@@ -787,6 +815,7 @@ void TransferItemsNeededForQueue(IMyAssembler assembler)
     
     if (itemFromQueue.name == null)
     {
+        //_logger.AddLogItem(new Log("Error", "Item not found!"));
         return;
     }
     
@@ -798,6 +827,7 @@ void TransferItemsNeededForQueue(IMyAssembler assembler)
     
     if ((double)assemblerInventoryCurrent < (double)assemblerInventoryMax)
     {
+        _logger.AddLogItem(new Log("Info", $"{assembler.CustomName} inventory is not full. Trying to Transfer materials!"));
         FindContainersWithMaterials(itemFromQueue.materials, totalSpaceTakes, assembler);
     }
 }
@@ -905,6 +935,7 @@ void CheckAndRefreshAssemblerQueue(IMyAssembler assembler)
             if (queueItems.Count == 0)
             {
                 queueItems.Remove(queueItems.First().Key);
+                _logger.AddLogItem(new Log("Info", $"Removed {queueItems.First().Key} from queue"));
             }
         }
     }
@@ -926,13 +957,13 @@ void ClearAssemblyLine(IMyAssembler assembler)
             if(itemContFound != null && cont.GetInventory(0).CanItemsBeAdded(item.Amount, item.Type)){
                 var index = items.IndexOf(item);
                 cont.GetInventory(0).TransferItemFrom(assembler.GetInventory(1), index, null, true, item.Amount);
-                //Echo($"Clearing {assembler.CustomName} Status: {cont.GetInventory(0).TransferItemFrom(assembler.GetInventory(1), index, null, true, item.Amount)}");
                 return true;
             }
             return false;
         });
     }
 
+    //_logger.AddLogItem(new Log("Info", $"Clearing Assemblers Finished!"));
     // Log instructions count
     //Echo("Clear Assembly Line method instructions: " + Runtime.CurrentInstructionCount.ToString());
 }
@@ -966,13 +997,16 @@ void ManageQueueAssembly(){
                 //Echo("Item: " + pair.Key + " Usage: True!");
                 if(queueItems.ContainsKey(itemDeffId)){
                     queueItems[itemDeffId] = queueAmount/assemblers.Count;
+                    _logger.AddLogItem(new Log("Info", $"Updated {itemDeffId.SubtypeId.ToString()} to queue"));
                 }
                 else{
                     queueItems.Add(itemDeffId, pair.Value/assemblers.Count);
+                    _logger.AddLogItem(new Log("Info", $"Added {itemDeffId.SubtypeId.ToString()} to queue"));
                 }
             } 
             else if(queueItems.ContainsKey(itemDeffId)) {
                 queueItems.Remove(itemDeffId);
+                _logger.AddLogItem(new Log("Info", $"Removed {itemDeffId.SubtypeId.ToString()} from queue"));
             }
         }
     }
@@ -1083,6 +1117,7 @@ public void ManageCurrentItems()
             }
         }
     }
+    _logger.AddLogItem(new Log("Info", "Current Items: " + currentItems.Count));
     //Echo("Manage Current Items method instructions: " + Runtime.CurrentInstructionCount.ToString());
 }
 

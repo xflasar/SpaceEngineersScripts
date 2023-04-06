@@ -143,7 +143,7 @@ string[] ConsumablesAndTools = new string[] {"PhysicalGunObject", "OxygenContain
 List<string> ignoreContainerNames = new List<string>(){ "DilithiumMatrix Cargo", "Deuterium Intermix", "Refinery Materials" }; // Containers with these names will be ignored
 Program()
 {
-    GridTerminalSystem.GetBlocksOfType(containerList, b => b.CubeGrid == Me.CubeGrid);
+    GridTerminalSystem.GetBlocksOfType(containerList, b => b.CubeGrid == Me.CubeGrid && b is IMyCargoContainer && !ignoreContainerNames.Contains(b.CustomName));
 
     lcdPanel = GridTerminalSystem.GetBlockWithName("LCD Deuterium Processor Manager") as IMyTextPanel;
 
