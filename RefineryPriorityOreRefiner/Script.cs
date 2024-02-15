@@ -12,20 +12,21 @@ List<IMyCargoContainer> containerList = new List<IMyCargoContainer>();
 List<IMyCargoContainer> filledContainerList = new List<IMyCargoContainer>();
 List<IMyCargoContainer> containerDilMatrixList = new List<IMyCargoContainer>();
 List<string> oreToRefine = new List<string> {
-	//"Stone",
-	//"Iron",
-	//"Nickel",
-	//"Cobalt",
-	//"Silicon",
-	//"Uranium",
-	//"Silver",
-	//"Gold",
-	//"Platinum",
-	//"Magnesium",
-	//"Scrap",
-    "Dilithium",
+	"Dilithium",
     "Tritanium",
-    "Duranium"
+    "Duranium",
+    "Stone",
+	"Iron",
+	"Nickel",
+	"Cobalt",
+	"Silicon",
+	"Uranium",
+	"Silver",
+	"Gold",
+	"Platinum",
+	"Magnesium",
+	"Scrap"
+    
 }; 
 // Use this as priority list -> Depending on position it will take the priority if no more ore to be refined will go onto next one -> this probably
 // will be better to use from Me.CustomData ( better user manipulation )
@@ -40,7 +41,7 @@ Program()
 {
   // Configure this program to run the Main method every 100 update ticks
     Runtime.UpdateFrequency = UpdateFrequency.Update100;
-    GridTerminalSystem.GetBlocksOfType(refineryList, b => b.CubeGrid == Me.CubeGrid && !StringSplitter(b.DetailedInfo)[0].Contains("Deuterium"));
+    GridTerminalSystem.GetBlocksOfType(refineryList, b => !StringSplitter(b.DetailedInfo)[0].Contains("Deuterium"));
     GridTerminalSystem.GetBlocksOfType(containerList, b => b.CubeGrid == Me.CubeGrid);
     GridTerminalSystem.GetBlocksOfType(containerDilMatrixList, b => b.CustomName.Contains(containerTransferEnemyAssemblersCustomName));
 }
@@ -88,6 +89,7 @@ List<string> StringSplitter(string text){
 
 void Main(string argument)
 {
+    Echo($"Refineries: {refineryList.Count}");
     if (programDelayCounter < programDelay)
     {
         programDelayCounter++;
@@ -97,59 +99,11 @@ void Main(string argument)
     programDelayCounter = 0;
     FindNonEmptyOreCargoContainers();
 
-    // Handle enemy-owned assemblers
-        List<IMyRefinery> enemyRefineries = refineryList.Where(refin => refin.OwnerId != Me.OwnerId).ToList();
-        enemyRefineries.ForEach(assembler =>
-        {
-            
-            var items = new List<MyInventoryItem>();
-            assembler.GetInventory(1).GetItems(items);
-
-            items.ForEach(item =>
-            {
-                var container = containerDilMatrixList.Find(cont => cont.GetInventory(0).CanItemsBeAdded(item.Amount, item.Type));
-                if (container != null)
-                {
-                    //Echo($"{container.GetInventory(0).TransferItemFrom(assembler.GetInventory(1), 0, null, true, item.Amount)}");
-                    container.GetInventory(0).TransferItemFrom(assembler.GetInventory(1), 0, null, true, item.Amount);
-                    containerList.Any(cont => {
-                        if(cont != container){
-                            var itemsCont = new List<MyInventoryItem>();
-                            cont.GetInventory(0).GetItems(itemsCont);
-
-                             var itemContFound = itemsCont.Find(itemCont => itemCont.Type == item.Type);
-
-                            var itemsContainer = new List<MyInventoryItem>();
-                            container.GetInventory(0).GetItems(itemsContainer);
-
-                            var itemFoundContainer = itemsContainer.Find( itemContainer => itemContainer.Type == item.Type);
-
-                           
-
-                            if(itemContFound != null && cont.GetInventory(0).CanItemsBeAdded(itemFoundContainer.Amount, itemFoundContainer.Type)){
-                                var index = itemsContainer.IndexOf(itemFoundContainer);
-                                //Echo($"Transfer Completed? {cont.GetInventory(0).TransferItemFrom(container.GetInventory(0), index, null, true, itemFoundContainer.Amount)}");
-                                cont.GetInventory(0).TransferItemFrom(container.GetInventory(0), index, null, true, itemFoundContainer.Amount);
-                                return true;
-                            }
-                        } 
-                        return false;
-                    });
-                }
-            });
-        });
-
     foreach (IMyRefinery refinery in refineryList)
     {
         IMyCargoContainer container = null;
-        if(refinery.OwnerId != Me.OwnerId){
-            container = FindCargoContainerWithOreToRefine(true);
-        }
-        else{
-            container = FindCargoContainerWithOreToRefine(false);
-        }
+        container = FindCargoContainerWithOreToRefine();
         
-
         if (container != null)
         {
             try{
@@ -161,7 +115,7 @@ void Main(string argument)
                 Echo($"Error with moving ore to refinery: {ex}");
             }
 
-            MoveRefinedToContainer(refinery);
+            //MoveRefinedToContainer(refinery);
         }
         var items = new List<MyInventoryItem>();
         refinery.GetInventory(1).GetItems(items);
@@ -175,6 +129,7 @@ void Main(string argument)
 // Define a method to move ore from cargo containers to refineries
 void MoveOreToRefinery(IMyCargoContainer container, IMyRefinery refinery, string oreName)
 {
+    double TransferAmount = 1000;
     var containerInventory = container.GetInventory(0);
     var containerItems = new List<MyInventoryItem>();
     containerInventory.GetItems(containerItems);
@@ -186,24 +141,45 @@ void MoveOreToRefinery(IMyCargoContainer container, IMyRefinery refinery, string
         var refineryInventory = refinery.GetInventory(0);
         var refineryItems = new List<MyInventoryItem>();
         refineryInventory.GetItems(refineryItems);
+        if((double)oreItem.Amount < TransferAmount){
+            TransferAmount = (double)oreItem.Amount;
+        }
 
         foreach (var item in refineryItems)
         {
             if (!item.Type.SubtypeId.Contains(oreName))
             {
                 IMyCargoContainer targetContainer = null;
-                if(refinery.OwnerId != Me.OwnerId){
+                if(refinery.OwnerId == 144115188075856837){
                     targetContainer = containerDilMatrixList.FirstOrDefault(containerOut => containerOut.GetInventory(0).CanItemsBeAdded(item.Amount, item.Type));
                 }
-                targetContainer = containerList.FirstOrDefault(containerOut => containerOut.GetInventory(0).CanItemsBeAdded(item.Amount, item.Type));
+                else
+                {
+                    targetContainer = containerList.FirstOrDefault(containerOut => containerOut.GetInventory(0).CanItemsBeAdded(item.Amount, item.Type));
+                }
+
                 if (targetContainer != null)
                 {
                     refineryInventory.TransferItemTo(targetContainer.GetInventory(0), 0, null, true, item.Amount);
                 }
             }
         }
+        if(refinery.IsProducing){
+            return;
+        }
 
-        containerInventory.TransferItemTo(refineryInventory, containerItems.IndexOf(oreItem), null, true, oreItem.Amount);
+        if(refinery.OwnerId == 144115188075856837){
+            var tgContainer = containerDilMatrixList.FirstOrDefault(containerTransf => containerTransf.GetInventory(0).CanItemsBeAdded((VRage.MyFixedPoint)TransferAmount, oreItem.Type));
+            if(containerInventory.TransferItemTo(tgContainer.GetInventory(0), containerItems.IndexOf(oreItem), null, true, (VRage.MyFixedPoint)TransferAmount)){
+                var tgContainerItems = new List<MyInventoryItem>();
+                tgContainer.GetInventory(0).GetItems(tgContainerItems);
+                var oreItemE = tgContainerItems.FirstOrDefault(item => item.Type.TypeId == "MyObjectBuilder_Ore" && item.Type.SubtypeId.Contains(oreName));
+                tgContainer.GetInventory(0).TransferItemTo(refineryInventory, tgContainerItems.IndexOf(oreItemE), null, true, oreItemE.Amount);
+            }
+        }
+        else{
+            containerInventory.TransferItemTo(refineryInventory, containerItems.IndexOf(oreItem), null, true, (VRage.MyFixedPoint)TransferAmount);
+        }
     }
 }
 
@@ -216,29 +192,20 @@ void MoveRefinedToContainer(IMyRefinery refinery)
 
     if (refineryItems.Count > 0)
     {
-        var targetContainer = containerList.Find(cont => cont.GetInventory(0).CanItemsBeAdded(refineryItems[0].Amount, refineryItems[0].Type));
-        
-        var targetInventory = targetContainer.GetInventory(0);
-        var amountToTransfer = refineryItems[0].Amount;
-        var index = 0;
-        var transferSuccess = false;
-        var sourceInventory = refineryInventory;
-        var targetItems = new List<MyInventoryItem>();
-        targetInventory.GetItems(targetItems);
-        var targetItem = targetItems.Find(item => item.Type == refineryItems[0].Type);
-        if(targetItem != null)
-        {
-            transferSuccess = targetInventory.TransferItemFrom(sourceInventory, index, targetItems.IndexOf(targetItem));
-        }
-        else
-        {
-            transferSuccess = targetInventory.TransferItemFrom(sourceInventory, index, 0);
-        }
-
-        if (!transferSuccess)
-        {
-            MoveRefinedToContainer(refinery);
-        }
+        refineryItems.ForEach(item => {
+            Echo($"{refineryItems[0].Type}/{refineryItems[0].Amount}");
+            IMyCargoContainer targetContainer = null;
+            if(refinery.OwnerId == 144115188075856837){
+                targetContainer = containerDilMatrixList.Find(container => container.GetInventory(0).CanItemsBeAdded(item.Amount, item.Type));
+            }
+            else{
+                targetContainer = containerList.Find(cont => cont.GetInventory(0).CanItemsBeAdded(refineryItems[0].Amount, refineryItems[0].Type));
+            }
+            targetContainer.GetInventory(0).TransferItemFrom(refineryInventory, 0, null, true, item.Amount);
+            Echo(targetContainer.GetInventory(0).TransferItemFrom(refineryInventory, refineryItems.IndexOf(item), null, true, item.Amount).ToString());
+            //Echo(refineryInventory.TransferItemTo(targetContainer.GetInventory(0), refineryItems.IndexOf(item), null, true, item.Amount).ToString());
+            Echo($"{refinery.OwnerId + "/" + Me.OwnerId} output {refineryItems[0].Amount} moved to {targetContainer.CustomName}");
+        });
     }
 }
 
@@ -252,27 +219,15 @@ void FindNonEmptyOreCargoContainers()
     }).ToList();
 }
 
-IMyCargoContainer FindCargoContainerWithOreToRefine(bool EnemyOwned)
+IMyCargoContainer FindCargoContainerWithOreToRefine()
 {
-    if(EnemyOwned){
-        return containerDilMatrixList.Find(container =>
-        {
-            List<MyInventoryItem> items = new List<MyInventoryItem>();
-            container.GetInventory(0).GetItems(items);
-
-            return items.Any(item => item.Type.TypeId == "MyObjectBuilder_Ore" && item.Type.SubtypeId.Contains(oreToRefine[0]));
-        });
-    }
-    else{
-
     return filledContainerList.Find(container =>
         {
             List<MyInventoryItem> items = new List<MyInventoryItem>();
             container.GetInventory(0).GetItems(items);
 
             return items.Any(item => item.Type.TypeId == "MyObjectBuilder_Ore" && item.Type.SubtypeId.Contains(oreToRefine[0]));
-        });
-    }
+    });
 }
 
 IMyCargoContainer GetEmptyContainer()

@@ -29,6 +29,7 @@ TimeSpan TimeActiveTotal = TimeSpan.Zero;
 TimeSpan lastSaveTime = TimeSpan.Zero;
 int DeuteriumUsageTotal = 0;
 int AntiDeuteriumUsageTotal = 0;
+bool runT2 = false;
 IMyTextPanel lcdPanel;
 IEnumerator<bool> _stateMachine;
 int activeRefineries = 0;
@@ -87,7 +88,9 @@ public IEnumerator<bool> RunStuffOverTime()
         Echo("Performance (Ms): " + Runtime.LastRunTimeMs);
         Echo("Active Refineries: " + activeRefineries);
         Echo("DilithiumMatrixAmount: " + DilithiumMatrixAmountCur);
-        if(500 > counter){
+        Echo("RunT2: " + runT2);
+        Echo("CIRSOTT: " + counterInRunStuffOverTimeT);
+        if(300 > counter){
             counter++;
         }else
         {
@@ -98,15 +101,28 @@ public IEnumerator<bool> RunStuffOverTime()
         yield return true;
     }
 }
-
+int counterInRunStuffOverTimeT = 0;
 public void RunStuffOverTimeT()
 {
-    TransferMatrixResourceToRefMatsCargo();
-    FillDeutProcessors();
-    ClearDeutProcessors();
-    RenameCargoContainer();
-    SaveToCD();
-    SaveLCDData();
+    if(counterInRunStuffOverTimeT < 6){
+        counterInRunStuffOverTimeT++;
+    }
+    else{
+        counterInRunStuffOverTimeT = 0;
+        ClearDeutProcessors();
+        RenameCargoContainer();
+        SaveToCD();
+        SaveLCDData();
+    }
+    if(counterInRunStuffOverTimeT == 2){
+        TransferMatrixResourceToRefMatsCargo();
+        runT2 = true;
+    }
+    if(counterInRunStuffOverTimeT == 4){
+        FillDeutProcessors();
+        runT2 = false;
+    }
+    
 }
 
 
@@ -166,13 +182,14 @@ void TransferMatrixResourceToRefMatsCargo(){
         container.GetInventory(0).GetItems(items);
 
         var itemFound = items.Find(item => item.Type.SubtypeId == "DilithiumMatrix");
+        if(itemFound == null) return;
         pos = items.IndexOf(itemFound);
         DilithiumMatrixMade += (int)itemFound.Amount;
         DilithiumMatrixAllTimeCountTransfered += (int)itemFound.Amount;
         DilithiumMatrixAllTimeCountTransferedMoney = DilithiumMatrixAllTimeCountTransfered * 180;
 
         // Now we transfer all of it into one of Refinery Materials cargo container
-        refineryMatsContainersList.Find(containerR => containerR.GetInventory(0).CanItemsBeAdded(itemFound.Amount, itemFound.Type)).GetInventory(0).TransferItemFrom(container.GetInventory(), pos, null, true, itemFound.Amount);
+        refineryMatsContainersList.Find(containerR => containerR.GetInventory(0).CanItemsBeAdded(itemFound.Amount, itemFound.Type)).GetInventory(0).TransferItemFrom(container.GetInventory(0), pos, null, true, itemFound.Amount);
     });
 }
 
@@ -209,7 +226,7 @@ void FillDeutProcessors(){
         enabledRefineries.Add(deutRefList[i-1]);
     }
     activeRefineries = enabledRefineries.Count;
-
+    Echo("Operations after reassignment: " + Runtime.CurrentInstructionCount);
     enabledRefineries.ForEach(deutRefinery =>
     {
         var refineryInputItems = new List<MyInventoryItem>();
@@ -293,45 +310,11 @@ void RenameCargoContainer(){
     {
         if (container.CustomName.Contains("Deuterium Intermix")){
             double volume = ((double)container.GetInventory(0).CurrentVolume / (double)container.GetInventory(0).MaxVolume) * 100;
-            if(volume > 101){
-                IMyCargoContainer contair = containerList.Find(containerE => !containerE.CustomName.Contains("Deuterium Intermix") || !containerE.CustomName.Contains("Refinery Materials"));
-                contair.CustomName = "Deuterium Intermix";
-            }
-            else{
-                container.CustomName = "Deuterium Intermix (" + volume + "%)";
-            }
+            container.CustomName = "Deuterium Intermix (" + volume + "%)";
         }
         else if(container.CustomName.Contains("Refinery Materials")){
             double volume = ((double)container.GetInventory(0).CurrentVolume / (double)container.GetInventory(0).MaxVolume) * 100;
-            if(volume > 101){
-                IMyCargoContainer contair = containerList.Find(containerE => !containerE.CustomName.Contains("Deuterium Intermix") || !containerE.CustomName.Contains("Refinery Materials"));
-                contair.CustomName = "Refinery Materials";
-            }
-            else{
-                container.CustomName = "Refinery Materials (" + volume + "%)";
-            }
-        }
-        else{
-            if(deutIntermixContainersList.Count != 0 || refineryMatsContainersList.Count != 0) return;
-
-            var items = new List<MyInventoryItem>();
-            container.GetInventory(0).GetItems(items);
-
-            if(deutIntermixContainersList.Count == 0 && (items.Any(item => {
-                if(item.Type.SubtypeId == "AntiDeuterium" || item.Type.SubtypeId == "DilithiumMatrix" || item.Type.SubtypeId == "Deuterium"){
-                    return false;
-                }
-                return true;
-            }) || items.Count == 0)){
-                container.CustomName = "Deuterium Intermix";
-                deutIntermixContainersList.Add(container);
-                return;
-            }
-            else if(refineryMatsContainersList.Count == 0 && (!items.Any(item => item.Type.SubtypeId == "DeuteriumIntermix") || items.Count == 0)){
-                container.CustomName = "Refinery Materials";
-                refineryMatsContainersList.Add(container);
-                return;
-            }
+            container.CustomName = "Refinery Materials (" + volume + "%)";
         }
     });
 }

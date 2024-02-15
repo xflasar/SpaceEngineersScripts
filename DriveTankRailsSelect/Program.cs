@@ -17,6 +17,18 @@ namespace IngameScript
 {
     partial class Program : MyGridProgram
     {
+        /*
+         * This script is used for having idea how many times can Eipstien drives be repaired depending on current amount of components in the ship.
+         * If ship doesn't have enough materials it will warn with basic message of Not enough components to repair drives!.
+         * Each Component that is found depending on mainDrivesCompsMin which is Dictionary of Items needed for building one Scirroco Eipstein Drive will show how many times you can repair/build 1 whole Eipstein.
+         * 
+         * Second feature is listing SpecialItems which comes from hunting like MCRN,UNN and other items.
+         * This is only just getting the item amount and showing them on screen
+         * 
+         * TODO:
+         * - We can just do one loop of items and find and assign wanted components and special items in one go no need for own forEach loop
+         * 
+         */
         List<IMyCargoContainer> containers = new List<IMyCargoContainer>();
 
         public Program()
@@ -82,6 +94,8 @@ namespace IngameScript
             {
                 Echo("Not Enough Mats for repair drives!!");
             }
+
+            PrintOutSpecialItems();
         }
 
         class Report
@@ -108,6 +122,30 @@ namespace IngameScript
             public string PrintOut()
             {
                 return "Effectively can repair " + lowestRepair + " due to " + itemName + " being low!!";
+            }
+        }
+
+        // Special Items from Hunting ships
+        List<string> specialItems = new List<string> {
+            "MCRN",
+            "UNN",
+            "PDC",
+            "BlackBox",
+            "Inner",
+            "Lidar"
+        };
+
+        // Loops items and finds specialItems in it and echoes it
+        void PrintOutSpecialItems()
+        {
+            Echo("\n Special Items:");
+            foreach (var item in items)
+            {
+                specialItems.ForEach(sI => {
+                    if (item.Key.Contains(sI)) {
+                        Echo(item.Key + ": " + item.Value);
+                    }
+                });
             }
         }
 
