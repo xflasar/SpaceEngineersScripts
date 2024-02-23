@@ -48,7 +48,7 @@ namespace IngameScript
             mainDrivesCompsMin.Add("MetalGrid", 720);
             mainDrivesCompsMin.Add("Thrust", 720);
             mainDrivesCompsMin.Add("PowerCell", 640);
-            mainDrivesCompsMin.Add("FusionCoil", 148);
+            mainDrivesCompsMin.Add("AryxLynxon_FusionComponent", 148);
             mainDrivesCompsMin.Add("Superconductor", 640);
             mainDrivesCompsMin.Add("LargeTube", 360);
 
@@ -209,19 +209,29 @@ namespace IngameScript
         // Prints out mainDrivesCompsMin Dictionary components in a format of: ItemName: itemAmount/mainDrivesCompsMinAmount can repair itemsMaxRepairTimes
         bool PrintOut()
         {
+            int requiredComps = mainDrivesCompsMin.Count;
+            int counterCompsPresent = 0;
             bool notEnougMats = false;
             items.Keys.ToList().ForEach(key =>
             {
                 if (mainDrivesCompsMin.Keys.Contains(key))
                 {
+                    counterCompsPresent++;
                     Echo(key + ": " + items[key] + "/" + mainDrivesCompsMin[key] + " can repair " + itemsMaxRepair[key]);
                     if (items[key] < mainDrivesCompsMin[key])
                     {
                         Echo("Missing " + (items[key] - mainDrivesCompsMin[key]) + " of " + key);
                         notEnougMats |= true;
+
                     }
+
                 }
             });
+
+            if (counterCompsPresent < requiredComps)
+            {
+                notEnougMats = true;
+            }
 
             return notEnougMats;
         }
