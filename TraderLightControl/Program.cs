@@ -45,7 +45,7 @@ namespace IngameScript
         int runs = 0;
         bool reversed = false;
 
-        int mode = 0;
+        int mode = 2;
 
         float speed = 1.5f;
 
