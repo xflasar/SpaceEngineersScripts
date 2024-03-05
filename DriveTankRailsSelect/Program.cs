@@ -1,4 +1,5 @@
 ﻿using Sandbox.Game.Gui;
+using Sandbox.Game.WorldEnvironment.Modules;
 using Sandbox.ModAPI.Ingame;
 using Sandbox.ModAPI.Interfaces;
 using System;
@@ -27,9 +28,11 @@ namespace IngameScript
          * 
          * TODO:
          * - We can just do one loop of items and find and assign wanted components and special items in one go no need for own forEach loop
-         * 
+         * - Optimize Method for transfering items to be ejected to connectors for ejection ( Right now it just mostly overshoots and ejects more than needed items
          */
         List<IMyCargoContainer> containers = new List<IMyCargoContainer>();
+        List<IMyShipConnector> ejectConnectors = new List<IMyShipConnector>();
+        List<MyInventoryItem?> inventoryC = new List<MyInventoryItem?>();
 
         public Program()
         {
@@ -38,21 +41,21 @@ namespace IngameScript
             Echo = EchoToLCD;
 
             // Fetch a log text panel
-            _logOutput = GridTerminalSystem.GetBlockWithName("GC-12-Earthshaker.Log LCD") as IMyTextPanel; // Set the name here so the script can get the lcd to put Echo to
+            _logOutput = GridTerminalSystem.GetBlockWithName("XDR-Weezel.LCD.Log LCD") as IMyTextPanel; // Set the name here so the script can get the lcd to put Echo to
 
 
             GridTerminalSystem.GetBlocksOfType<IMyCargoContainer>(containers, c => c.CubeGrid == Me.CubeGrid);
 
-            mainDrivesCompsMin.Add("SteelPlate", 2400);
-            mainDrivesCompsMin.Add("Construction", 900);
-            mainDrivesCompsMin.Add("MetalGrid", 720);
-            mainDrivesCompsMin.Add("Thrust", 720);
-            mainDrivesCompsMin.Add("PowerCell", 640);
-            mainDrivesCompsMin.Add("AryxLynxon_FusionComponent", 148);
-            mainDrivesCompsMin.Add("Superconductor", 640);
-            mainDrivesCompsMin.Add("LargeTube", 360);
+            GridTerminalSystem.GetBlocksOfType<IMyShipConnector>(ejectConnectors, c => c.CustomName == "Connector Ejector");
 
-
+            mainDrivesCompsMin.Add("SteelPlate", 60000);
+            mainDrivesCompsMin.Add("Construction", 2400);
+            mainDrivesCompsMin.Add("MetalGrid", 2400);
+            mainDrivesCompsMin.Add("Thrust", 1600);
+            mainDrivesCompsMin.Add("PowerCell", 2400);
+            mainDrivesCompsMin.Add("FusionComponent", 240);
+            mainDrivesCompsMin.Add("Superconductor", 2000);
+            mainDrivesCompsMin.Add("LargeTube", 720);
         }
 
         Dictionary<string, MyFixedPoint> mainDrivesCompsMin = new Dictionary<string, MyFixedPoint>();
@@ -82,9 +85,9 @@ namespace IngameScript
             GetItems();
 
             Report rep = GetCouterRepairs();
-            
+
             bool notEnougMats = PrintOut();
-            
+
             if (rep != null)
             {
                 Echo(rep.PrintOut());
@@ -96,6 +99,97 @@ namespace IngameScript
             }
 
             PrintOutSpecialItems();
+        }
+
+        void ThrowExcessCargo(string item, int amount)
+        {
+            int ejectorCount = ejectConnectors.Count;
+            int totalItemsToEject = amount;
+            Echo(item);
+            if (ejectorCount == 0) return;
+
+            int actualAmount = amount / ejectorCount / 2;
+
+            if(amount == 1) actualAmount = 1;
+
+            switch(item)
+            {
+                case "SteelPlate":
+                    if(actualAmount > 8000) {
+                        actualAmount = 8000;
+                    }
+                    break;
+                case "Thrust":
+                    if(actualAmount > 2400)
+                    {
+                        actualAmount = 2400;
+                    }
+                    break;
+                case "PowerCell":
+                    if (actualAmount > 600)
+                    {
+                        actualAmount = 600;
+                    }
+                    break;
+                case "LargeTube":
+                    if (actualAmount > 631)
+                    {
+                        actualAmount = 631;
+                    }
+                    break;
+                case "MetalGrid":
+                    if (actualAmount > 1600)
+                    {
+                        actualAmount = 1600;
+                    }
+                    break;
+                case "Superconductor":
+                    if (actualAmount > 3000)
+                    {
+                        actualAmount = 3000;
+                    }
+                    break;
+                case "Construction":
+                    if (actualAmount > 12000)
+                    {
+                        actualAmount = 12000;
+                    }
+                    break;
+            }
+
+            containers.ForEach(c =>
+            {
+                var inventoryCc = c.GetInventory();
+
+                List<MyInventoryItem> items = new List<MyInventoryItem>();
+
+                inventoryCc.GetItems(items);
+
+                items.ForEach(i =>
+                {
+                    if (i.Type.SubtypeId == item)
+                    {
+                        if (actualAmount <= 100)
+                        {
+                            // ejectConnectors[0].GetInventory().TransferItemFrom(inventoryCc, i, actualAmount);
+                            return;
+                        } else
+                        {
+                            ejectConnectors.ForEach(e =>
+                            {
+                                if(e.GetInventory().CanItemsBeAdded(actualAmount, i.Type))
+                                {
+                                    if(e.GetInventory().TransferItemFrom(inventoryCc, i, actualAmount))
+                                    {
+                                        totalItemsToEject -= actualAmount;
+                                        Echo($"Thrown {actualAmount} units of {i.Type.SubtypeId} out of {totalItemsToEject}");
+                                    }
+                                }
+                            });
+                        }
+                    }
+                });
+            });
         }
 
         class Report
@@ -132,7 +226,18 @@ namespace IngameScript
             "PDC",
             "BlackBox",
             "Inner",
-            "Lidar"
+            "Lidar",
+            "High",
+            "Chip",
+            "Belter",
+            "Slug",
+            "Guidance",
+            "Tracking",
+            "IceBox",
+            "Water_Tank",
+            "HeavyMotor",
+            "ToolPack",
+            "SmallArms"
         };
 
         // Loops items and finds specialItems in it and echoes it
@@ -156,16 +261,23 @@ namespace IngameScript
             itemsMaxRepair.Clear();
             foreach (var item in items)
             {
-                if (mainDrivesCompsMin.Keys.Contains(item.Key) && (items[item.Key] - mainDrivesCompsMin[item.Key] > mainDrivesCompsMin[item.Key]))
+                if (mainDrivesCompsMin.Keys.Contains(item.Key))
                 {
-                    int repairTimes = (int)((double)items[item.Key] / (double)mainDrivesCompsMin[item.Key]);
-                    
-                    if (rep.GetLowestRepair() > repairTimes)
+                    if (items[item.Key] - mainDrivesCompsMin[item.Key] >= 0)
                     {
-                        rep.ChangeLR(item.Key ,repairTimes);
-                    }
+                        int repairTimes = (int)Math.Floor((double)items[item.Key] / (double)mainDrivesCompsMin[item.Key]);
                     
-                    itemsMaxRepair.Add(item.Key, repairTimes);
+                        if (rep.GetLowestRepair() > repairTimes)
+                        {
+                            rep.ChangeLR(item.Key ,repairTimes);
+                        }
+                    
+                        itemsMaxRepair.Add(item.Key, repairTimes);
+                    }
+                    else
+                    {
+                        itemsMaxRepair.Add(item.Key, 0);
+                    }
                 }
             }
             
@@ -175,65 +287,104 @@ namespace IngameScript
         }
 
         // We get all items we have in the grid inventory and set them to items dictionary
-        void GetItems ()
+        void GetItems()
         {
-            containers.ForEach(c =>
+            try
             {
-                VRage.Game.ModAPI.Ingame.IMyInventory inventory = c.GetInventory();
-                if (inventory != null)
+                inventoryC.Clear();
+                containers.ForEach(c =>
                 {
-
-                    for (int slot = 0; slot < inventory.ItemCount; slot++)
+                    VRage.Game.ModAPI.Ingame.IMyInventory inventory = c.GetInventory();
+                    if (inventory != null)
                     {
-                        if (inventory.IsItemAt(slot))
+                        for (int slot = 0; slot < inventory.ItemCount; slot++)
                         {
-                            var item = inventory.GetItemAt(slot);
-                            if (item != null && item.HasValue)
+                            if (inventory.IsItemAt(slot))
                             {
-                                if (!items.ContainsKey(item.Value.Type.SubtypeId))
+                                var item = inventory.GetItemAt(slot);
+                                inventoryC.Add(item);
+                                // This is yayks no idea why tho won't let me save the Aryx component as SubTypeId
+                                if (item.Value.Type.SubtypeId.Contains("FusionComponent"))
                                 {
-                                    items.Add(item.Value.Type.SubtypeId, item.Value.Amount);
+                                    if(items.ContainsKey("FusionComponent"))
+                                    {
+                                        items["FusionComponent"] += item.Value.Amount;
+                                    } else
+                                    {
+                                        items.Add("FusionComponent", item.Value.Amount);
+                                    }
                                 }
-                                else
+                                if (item != null && item.HasValue && !item.Value.Type.SubtypeId.Contains("FusionComponent"))
                                 {
-                                    items[item.Value.Type.SubtypeId] += item.Value.Amount;
+                                    string subtypeId = item.Value.Type.SubtypeId;
+
+                                    if (!items.ContainsKey(subtypeId))
+                                    {
+                                        items.Add(subtypeId, item.Value.Amount);
+                                        
+                                    }
+                                    else
+                                    {
+                                        items[subtypeId] += item.Value.Amount;
+                                    }
                                 }
                             }
-
                         }
                     }
-                }
-            });
+                });
+            }
+            catch (Exception ex)
+            {
+                Echo(ex.Message);
+            }
         }
+
 
         // Prints out mainDrivesCompsMin Dictionary components in a format of: ItemName: itemAmount/mainDrivesCompsMinAmount can repair itemsMaxRepairTimes
         bool PrintOut()
         {
             int requiredComps = mainDrivesCompsMin.Count;
             int counterCompsPresent = 0;
-            bool notEnougMats = false;
+            bool notEnoughMats = false;
+
             items.Keys.ToList().ForEach(key =>
             {
-                if (mainDrivesCompsMin.Keys.Contains(key))
+                if (mainDrivesCompsMin.ContainsKey(key))
                 {
                     counterCompsPresent++;
-                    Echo(key + ": " + items[key] + "/" + mainDrivesCompsMin[key] + " can repair " + itemsMaxRepair[key]);
-                    if (items[key] < mainDrivesCompsMin[key])
-                    {
-                        Echo("Missing " + (items[key] - mainDrivesCompsMin[key]) + " of " + key);
-                        notEnougMats |= true;
 
+                    // Convert VRage.MyFixedPoint to numeric types
+                    int itemsValue = (int)items[key];
+                    int mainDrivesCompsMinValue = (int)mainDrivesCompsMin[key];
+
+                    // Use Math.Max to calculate positive difference
+                    int missingAmount = Math.Max(0, mainDrivesCompsMinValue - itemsValue);
+
+                    if(itemsValue > mainDrivesCompsMinValue * 1.5)
+                    {
+                        Echo(itemsValue.ToString());
+                        Echo(mainDrivesCompsMinValue.ToString());
+                        Echo((itemsValue - mainDrivesCompsMinValue).ToString());
+                        int amountToThrow = itemsValue - mainDrivesCompsMinValue - 2;
+                        ThrowExcessCargo(key, amountToThrow);
                     }
 
+                    Echo($"{key}: {itemsValue}/{mainDrivesCompsMinValue} can repair {itemsMaxRepair[key]}");
+
+                    if (missingAmount > 0)
+                    {
+                        Echo($"Missing {missingAmount} of {key}");
+                        notEnoughMats = true;
+                    }
                 }
             });
 
             if (counterCompsPresent < requiredComps)
             {
-                notEnougMats = true;
+                notEnoughMats = true;
             }
 
-            return notEnougMats;
+            return notEnoughMats;
         }
     }
 }
