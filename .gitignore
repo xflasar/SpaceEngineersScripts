@@ -2,13 +2,6 @@
 # This .gitignore file was automatically created by Microsoft(R) Visual Studio.
 ################################################################################
 
-/DriveTankRailsSelect/.vs/DriveTankRailsSelect
-/DriveTankRailsSelect/bin
-/DriveTankRailsSelect/obj
-/TraderLightControl/.vs/TraderLightControl
-/TraderLightControl/bin
-/TraderLightControl/obj
-/.vs
-/WeaponsManager/.vs/WeaponsManager
-/WeaponsManager/bin
-/WeaponsManager/obj
+obj
+bin
+.vs
