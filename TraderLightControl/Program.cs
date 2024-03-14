@@ -51,7 +51,7 @@ namespace IngameScript
 
         public Program()
         {
-            Runtime.UpdateFrequency = UpdateFrequency.Update1;
+            Runtime.UpdateFrequency = UpdateFrequency.Update10;
 
             lGroupBool.Add(GridTerminalSystem.GetBlockGroupWithName("L1"));
             lGroupBool.Add(GridTerminalSystem.GetBlockGroupWithName("L2"));

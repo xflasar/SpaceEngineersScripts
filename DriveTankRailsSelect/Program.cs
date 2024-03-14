@@ -105,7 +105,7 @@ namespace IngameScript
         {
             int ejectorCount = ejectConnectors.Count;
             int totalItemsToEject = amount;
-            Echo(item);
+
             if (ejectorCount == 0) return;
 
             int actualAmount = amount / ejectorCount / 2;
@@ -169,7 +169,7 @@ namespace IngameScript
                 {
                     if (i.Type.SubtypeId == item)
                     {
-                        if (actualAmount <= 100)
+                        if (actualAmount <= 10)
                         {
                             // ejectConnectors[0].GetInventory().TransferItemFrom(inventoryCc, i, actualAmount);
                             return;
@@ -339,6 +339,17 @@ namespace IngameScript
             }
         }
 
+        List<string> itemsToThrowOut = new List<string>() {
+            "Detector",
+            "Glass",
+            "Gravity",
+            "Radio",
+            "Display",
+            "Computer",
+            "Small",
+            "Interior",
+            "Girder"
+        };
 
         // Prints out mainDrivesCompsMin Dictionary components in a format of: ItemName: itemAmount/mainDrivesCompsMinAmount can repair itemsMaxRepairTimes
         bool PrintOut()
@@ -347,36 +358,54 @@ namespace IngameScript
             int counterCompsPresent = 0;
             bool notEnoughMats = false;
 
-            items.Keys.ToList().ForEach(key =>
+            mainDrivesCompsMin.Keys.ToList().ForEach(comp =>
             {
-                if (mainDrivesCompsMin.ContainsKey(key))
+                int itemsValue = 0;
+                int mainDrivesCompsMinValue = (int)mainDrivesCompsMin[comp];
+                int missingAmount = Math.Max(0, mainDrivesCompsMinValue - itemsValue);
+
+                if (items.Keys.Contains(comp) && !items.Keys.Contains("MCRN"))
                 {
                     counterCompsPresent++;
 
                     // Convert VRage.MyFixedPoint to numeric types
-                    int itemsValue = (int)items[key];
-                    int mainDrivesCompsMinValue = (int)mainDrivesCompsMin[key];
+                    itemsValue = (int)items[comp];
+                    mainDrivesCompsMinValue = (int)mainDrivesCompsMin[comp];
 
                     // Use Math.Max to calculate positive difference
-                    int missingAmount = Math.Max(0, mainDrivesCompsMinValue - itemsValue);
+                    missingAmount = Math.Max(0, mainDrivesCompsMinValue - itemsValue);
 
-                    if(itemsValue > mainDrivesCompsMinValue * 1.5)
+                    if (itemsValue > mainDrivesCompsMinValue * 1.5)
                     {
                         Echo(itemsValue.ToString());
                         Echo(mainDrivesCompsMinValue.ToString());
                         Echo((itemsValue - mainDrivesCompsMinValue).ToString());
                         int amountToThrow = itemsValue - mainDrivesCompsMinValue - 2;
-                        ThrowExcessCargo(key, amountToThrow);
+                        ThrowExcessCargo(comp, amountToThrow);
                     }
 
-                    Echo($"{key}: {itemsValue}/{mainDrivesCompsMinValue} can repair {itemsMaxRepair[key]}");
+                    Echo($"{comp}: {itemsValue}/{mainDrivesCompsMinValue} can repair {itemsMaxRepair[comp]}");
 
                     if (missingAmount > 0)
                     {
-                        Echo($"Missing {missingAmount} of {key}");
+                        Echo($"Missing {missingAmount} of {comp}");
                         notEnoughMats = true;
                     }
+                } else
+                {
+                    Echo($"{comp}: {itemsValue}/{mainDrivesCompsMinValue} Missing: {missingAmount}");
                 }
+            });
+
+            items.Keys.ToList().ForEach(key =>
+            {
+                itemsToThrowOut.ForEach(k =>
+                {
+                    if(key.Contains(k))
+                    {
+                        ThrowExcessCargo(key, (int)items[key]);
+                    }
+                });
             });
 
             if (counterCompsPresent < requiredComps)

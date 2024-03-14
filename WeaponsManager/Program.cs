@@ -31,6 +31,8 @@ namespace IngameScript
 
             // Fetch a log text panel
             _logOutput = GridTerminalSystem.GetBlockWithName("XDR-Weezel.LCD.Log2 LCD") as IMyTextPanel; // Set the name here so the script can get the lcd to put Echo to
+            GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(WeaponsRails, b => b.CustomName.ToLower().Contains("rail"));
+            GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(Weapons, b => b.CustomName.ToLower().Contains("pdc"));
         }
 
         IMyTextPanel _logOutput;
@@ -62,14 +64,77 @@ namespace IngameScript
         bool weaponRail1 = false;
         bool weaponRail2 = false;
         int mode = 0;
+        int timerShootRail = 2;
 
         static int CalculateDelay(double totalHeat)
         {
-            double heatDelayFactor = 30.0 / (43800.0 - 42000.0);
+            double heatDelayFactor = 30.0 / (44800.0 - 40000.0);
             double delay = heatDelayFactor * (totalHeat - 40000);
 
             int result = (int)Math.Max(0, Math.Min(30, delay)); // Ensure the result is between 0 and 30
             return result;
+        }
+
+        bool weaponFiring = false;
+        bool weapon2Firing = false;
+        int firingDelay = 20;
+        int currentWeaponIndex = 0;
+        int countdown = 0;
+
+        void FireAlternateWeapons()
+        {
+            Echo(currentWeaponIndex.ToString());
+
+            if (WeaponsRails[currentWeaponIndex].GetValueBool("OnOff"))
+            {
+                Echo(countdown.ToString() + "weap: " + WeaponsRails[currentWeaponIndex]);
+                if (countdown <= 0)
+                {
+                    weaponFiring = false;
+                    // Check if the current weapon is ready to fire and meets the firing conditions
+                    if (api.IsWeaponReadyToFire(WeaponsRails[currentWeaponIndex]) &&
+                        CanShootTarget(WeaponsRails[currentWeaponIndex]) && !weaponFiring)
+                    {
+                        // Fire the current weapon
+                        api.FireWeaponOnce(WeaponsRails[currentWeaponIndex]);
+
+                        countdown = firingDelay;
+
+                        // Switch to the next weapon
+                        if(currentWeaponIndex == 0)
+                        {
+                            currentWeaponIndex = 1;
+                        } else if (currentWeaponIndex == 1)
+                        {
+                            currentWeaponIndex = 0;
+                        }
+                        
+                    }
+                }
+                else
+                {
+                    countdown--;
+                    weaponFiring = true;
+                }
+            }
+            else
+            {
+                WeaponsRails[currentWeaponIndex].SetValueBool("OnOff", true);
+            }
+        }
+
+        bool CanShootTarget(IMyTerminalBlock weapon)
+        {
+            try
+            {
+                // Check if the weapon can shoot the target
+                return api.CanShootTarget(weapon, api.GetWeaponTarget(weapon).Value.EntityId, 0);
+            }
+            catch (Exception ex)
+            {
+                Echo("Error checking if weapon can shoot target: " + ex.Message);
+                return false;
+            }
         }
 
         public void Main(string argument, UpdateType updateSource)
@@ -94,30 +159,37 @@ namespace IngameScript
             id = Me.CubeGrid.EntityId;
             WeaponDefinitions.Clear();
             EchoString.Clear();
-            Weapons.Clear();
+            dict.Clear();
+            api.GetSortedThreats(Me, dict);
             api.GetAllCoreWeapons(WeaponDefinitions);
             EchoString.Append("Total Weapons registered: " + WeaponDefinitions.Count + "\n");
 
-            GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(Weapons, b => b.CustomName.ToLower().Contains("pdc"));
             Echo(Weapons.Count.ToString());
             if (Weapons.Count > 0)
             {
+                Echo(api.GetProjectilesLockedOn(Me.CubeGrid.EntityId).ToString() + "\n" + api.GetProjectilesLockedOn(Me.CubeGrid.EntityId).Item2 + "\n" + api.GetProjectilesLockedOn(Me.CubeGrid.EntityId).Item3 + "\n");
                 Weapons.ForEach(w =>
                 {
                     float heatLevel = api.GetHeatLevel(w);
                     int calculatedDelay = 0;
 
-                    if (heatLevel > 40000f)
+                    if (heatLevel > 40000f && heatLevel < 44000f)
                     {
                         double totalHeat = heatLevel;
                         calculatedDelay = CalculateDelay(totalHeat);
 
                         w.SetValue<float>("Burst Delay", calculatedDelay);
+                        EchoString.Append($"Weapon {w.CustomName}  =>  Total Heat: {heatLevel} => Delay: {calculatedDelay} | Actual Delay: {w.GetValue<float>("Burst Delay")} \n");
+                    } else if(heatLevel >= 43000f)
+                    {
+                        w.SetValue<float>("Burst Delay", 30);
+                        EchoString.Append($"Weapon {w.CustomName}  =>  Total Heat: {heatLevel} => Delay: {calculatedDelay} | Actual Delay: {w.GetValue<float>("Burst Delay")} !!!!!!!! OVERHEATING !!!!!!!!\n");
                     } else
                     {
                         w.SetValue<float>("Burst Delay", 0);
+                        EchoString.Append($"Weapon {w.CustomName}  =>  Total Heat: {heatLevel} => Delay: {calculatedDelay} | Actual Delay: {w.GetValue<float>("Burst Delay")} \n");
                     }
-                    EchoString.Append($"Weapon {w.CustomName}  =>  Total Heat: {heatLevel} => Delay: {calculatedDelay} \n");
+                    
                     
                 });
                 
@@ -125,37 +197,40 @@ namespace IngameScript
             }
             Echo(EchoString.ToString());
             Echo(mode.ToString());
-            if (mode == 1)
+            if (mode == 0)
             {
-                GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(WeaponsRails, b => b.CustomName.ToLower().Contains("rail"));
+                WeaponsRails.ForEach(w =>
+                {
+                    if (w.GetValueBool("OnOff"))
+                    {
+                        w.SetValueBool("OnOff", false);
+                    }
+                });
+            }
+            else if (mode == 1)
+            {
                 if (Weapons.Count > 0)
                 {
-                    int counter = 0;
-                    WeaponsRails.ForEach(w =>
+                    FireAlternateWeapons();
+
+                }
+            } else if (mode == 2)
+            {
+                if (api.GetAiFocus(Me.CubeGrid.EntityId).Value.Name != null)
+                {
+                    if (Weapons.Count > 0)
                     {
-                        if (api.GetWeaponTarget(w).HasValue) return;
-                        bool canShoot = api.CanShootTarget(w, api.GetWeaponTarget(w).Value.EntityId, 0);
-                        switch (counter)
-                        {
-                            case 0:
-                                if (!weaponRail2 && canShoot)
-                                {
-                                    WeaponsRails[1].SetValue<bool>("OnOff", false);
-                                    w.SetValue<bool>("OnOff", true);
-                                }
-                                break;
-                            case 1:
-                                if (!weaponRail1 && canShoot)
-                                {
-                                    WeaponsRails[0].SetValue<bool>("OnOff", false);
-                                    w.SetValue<bool>("OnOff", true);
-                                }
-                                break;
-                        }
-                        counter++;
-                    });
+                        FireAlternateWeapons();
+
+                    }
+                }
+                else
+                {
+                    api.ReleaseAiFocus(Me, Me.CubeGrid.EntityId);
+                    Echo("No targets focused!!");
                 }
             }
+
 
             return;
             /*
@@ -203,10 +278,8 @@ namespace IngameScript
             EchoString.Append("GridAi Target Data:\n");
             GetTargetInfo((MyDetectedEntityInfo)api.GetAiFocus(id));
             api.GetSortedThreats(Me, dict);
-            EchoString.Append("Available Targets: " + dict.Count + "\n");
-            EchoString.Append("Optimal DPS:" + api.GetOptimalDps(id) + "\n");
-            EchoString.Append("Construct DPS:" + api.GetConstructEffectiveDps(id) + "\n");
             
+            EchoString.Append("Available Targets: " + dict.Count + "\n");
             Me.CustomData = "";
             Me.CustomData = EchoString.ToString();
             Echo(Me.CustomData);
