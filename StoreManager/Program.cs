@@ -6,6 +6,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Data;
 using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
@@ -72,13 +73,20 @@ namespace IngameScript
 
                 inventoryItems.Keys.ToList().ForEach(item =>
                 {
-                    int amount = int.Parse(_ini.Get("Main", item).ToString());
-                    if (itemsSell.ContainsKey(item))
-                    {
-                        itemsSell[item] = amount;
+                    if (_ini.ContainsKey("Main", item)) {
+                        int amount = int.Parse(_ini.Get("Main", item).ToString());
+                        if (itemsSell.ContainsKey(item))
+                        {
+                            inventoryItems[item] += amount;
+                            itemsSell[item] = amount;
+                        } else
+                        {
+                            itemsSell.Add(item, amount);
+                        }
                     } else
                     {
-                        itemsSell.Add(item, amount);
+                        _ini.Set("Main", item, 0);
+                        Echo($"Set Ini key for {item}");
                     }
                 });
             }
@@ -95,6 +103,53 @@ namespace IngameScript
                 });
 
                 Me.CustomData = _ini.ToString();
+            }
+        }
+
+        List<string> itemsToBeAutolisted = new List<string>()
+        {
+            "UpgradedBelterComponent",
+            "MCRN_Fusion_Moderator",
+            "MCRN_Containment_Chamber",
+            "UN_Drum",
+            "UN_Filter",
+            "UN_Scrubber",
+            "UN_Cannister",
+            "MCRNComponent",
+            "GuidanceComponent",
+            "InnerComponent",
+            "UNNAdvComponent",
+            "PDCComponent",
+            "MCRNAdvComponent",
+            "UNNComponent"
+
+        };
+
+        void RefreshStoreItems()
+        {
+            return;
+            Dictionary<string, double> itemsToPutToStoreOffer = new Dictionary<string, double>();
+            inventoryItems.Keys.ToList().ForEach(item =>
+            {
+                if(itemsToBeAutolisted.Contains(item))
+                {
+                    itemsToPutToStoreOffer.Add(item, inventoryItems[item]);
+                }
+            });
+
+            if(itemsToPutToStoreOffer != null)
+            {
+                _storeItems.ForEach(item =>
+                {
+                    _storeBlockBuy.CancelStoreItem(item.Id);
+                });
+
+                itemsToPutToStoreOffer.ToList().ForEach(item =>
+                {
+                    MyStoreItemDataSimple itemDataSimple = new MyStoreItemDataSimple();
+                    //itemDataSimple.ItemId = 
+                    //_storeBlockBuy.InsertOffer(itemy)
+                });
             }
         }
 
@@ -217,6 +272,7 @@ namespace IngameScript
             });
 
             _ini.Set("Statistics", "Earnings", totalEarnings);
+            _ini.Set("Statistics", "LastSellTime", DateTime.Now.ToString());
 
             Me.CustomData = _ini.ToString();
         }
