@@ -45,27 +45,16 @@ namespace IngameScript
             _logOutput?.WriteText($"{text}\n", true);
         }
 
-        public void Save()
-        {
-        }
-
         public static WcPbApi api;
 
-        Dictionary<MyDetectedEntityInfo, float> dict = new Dictionary<MyDetectedEntityInfo, float>();
-        public List<MyDefinitionId> WeaponDefinitions = new List<MyDefinitionId>();
         public List<IMyTerminalBlock> Weapons = new List<IMyTerminalBlock>();
         public List<IMyTerminalBlock> WeaponsRails = new List<IMyTerminalBlock>();
-        public List<string> targetTypes = new List<string>();
+        //public List<string> targetTypes = new List<string>();
         private StringBuilder EchoString = new StringBuilder();
-        private IMyTerminalBlock weaponBlock;
-        long id = -1;
-        bool result = false;
-        IDictionary<string, int> temp = new Dictionary<string, int>();
-        bool weaponRail1 = false;
-        bool weaponRail2 = false;
+        //IDictionary<string, int> temp = new Dictionary<string, int>();
         int mode = 0;
-        int timerShootRail = 2;
 
+        // Does it work? Yeah kinda can be better
         static int CalculateDelay(double totalHeat)
         {
             double heatDelayFactor = 30.0 / (44800.0 - 40000.0);
@@ -76,53 +65,51 @@ namespace IngameScript
         }
 
         bool weaponFiring = false;
-        bool weapon2Firing = false;
         int firingDelay = 20;
         int currentWeaponIndex = 0;
         int countdown = 0;
 
+        // Main Method for Firing rail
         void FireAlternateWeapons()
         {
-            Echo(currentWeaponIndex.ToString());
-
-            if (WeaponsRails[currentWeaponIndex].GetValueBool("OnOff"))
+            if(!WeaponsRails[currentWeaponIndex].IsFunctional)
             {
-                Echo(countdown.ToString() + "weap: " + WeaponsRails[currentWeaponIndex]);
-                if (countdown <= 0)
-                {
-                    weaponFiring = false;
-                    // Check if the current weapon is ready to fire and meets the firing conditions
-                    if (api.IsWeaponReadyToFire(WeaponsRails[currentWeaponIndex]) &&
-                        CanShootTarget(WeaponsRails[currentWeaponIndex]) && !weaponFiring)
-                    {
-                        // Fire the current weapon
-                        api.FireWeaponOnce(WeaponsRails[currentWeaponIndex]);
-
-                        countdown = firingDelay;
-
-                        // Switch to the next weapon
-                        if(currentWeaponIndex == 0)
-                        {
-                            currentWeaponIndex = 1;
-                        } else if (currentWeaponIndex == 1)
-                        {
-                            currentWeaponIndex = 0;
-                        }
-                        
-                    }
-                }
-                else
-                {
-                    countdown--;
-                    weaponFiring = true;
-                }
+                currentWeaponIndex++;
+                return;
             }
-            else
+            if (!WeaponsRails[currentWeaponIndex].GetValueBool("OnOff"))
             {
                 WeaponsRails[currentWeaponIndex].SetValueBool("OnOff", true);
+                return;
             }
+
+            if (countdown > 0)
+            {
+                countdown--;
+                return;
+            }
+
+            if (!api.IsWeaponReadyToFire(WeaponsRails[currentWeaponIndex]) || weaponFiring)
+            {
+                return;
+            }
+
+            if (!CanShootTarget(WeaponsRails[currentWeaponIndex]))
+            {
+                return;
+            }
+
+            // Fire the current weapon
+            api.FireWeaponOnce(WeaponsRails[currentWeaponIndex]);
+
+            countdown = firingDelay;
+
+            // Switch to the next weapon
+            currentWeaponIndex = (currentWeaponIndex + 1) % WeaponsRails.Count;
         }
 
+
+        // Method for checking if we can shoot the target with weapon
         bool CanShootTarget(IMyTerminalBlock weapon)
         {
             try
@@ -155,48 +142,49 @@ namespace IngameScript
             {
                 Echo("WeaponCore Api is failing! \n Make sure WeaponCore is enabled!"); return;
             }
-            result = false;
-            id = Me.CubeGrid.EntityId;
-            WeaponDefinitions.Clear();
-            EchoString.Clear();
-            dict.Clear();
-            api.GetSortedThreats(Me, dict);
-            api.GetAllCoreWeapons(WeaponDefinitions);
-            EchoString.Append("Total Weapons registered: " + WeaponDefinitions.Count + "\n");
 
-            Echo(Weapons.Count.ToString());
+            EchoString.Clear();
+
+            // PDC Management
+            Echo("PDC Management: \nPDC count: " + Weapons.Count.ToString() + "\n");
             if (Weapons.Count > 0)
             {
-                Echo(api.GetProjectilesLockedOn(Me.CubeGrid.EntityId).ToString() + "\n" + api.GetProjectilesLockedOn(Me.CubeGrid.EntityId).Item2 + "\n" + api.GetProjectilesLockedOn(Me.CubeGrid.EntityId).Item3 + "\n");
-                Weapons.ForEach(w =>
+                MyTuple<bool, int, int> projectiles = api.GetProjectilesLockedOn(Me.EntityId);
+
+                Echo(projectiles.Item1 + ":" + projectiles.Item2 + ":" + projectiles.Item3);
+                foreach (var w in Weapons)
                 {
                     float heatLevel = api.GetHeatLevel(w);
-                    int calculatedDelay = 0;
+                    int calculatedDelay = 1;
+                    string delayStatus = "";
+                    w.SetValue<bool>("WC_Shoot", false);
 
                     if (heatLevel > 40000f && heatLevel < 44000f)
                     {
+                        w.SetValue<bool>("WC_Shoot", true);
                         double totalHeat = heatLevel;
                         calculatedDelay = CalculateDelay(totalHeat);
-
-                        w.SetValue<float>("Burst Delay", calculatedDelay);
-                        EchoString.Append($"Weapon {w.CustomName}  =>  Total Heat: {heatLevel} => Delay: {calculatedDelay} | Actual Delay: {w.GetValue<float>("Burst Delay")} \n");
-                    } else if(heatLevel >= 43000f)
-                    {
-                        w.SetValue<float>("Burst Delay", 30);
-                        EchoString.Append($"Weapon {w.CustomName}  =>  Total Heat: {heatLevel} => Delay: {calculatedDelay} | Actual Delay: {w.GetValue<float>("Burst Delay")} !!!!!!!! OVERHEATING !!!!!!!!\n");
-                    } else
-                    {
-                        w.SetValue<float>("Burst Delay", 0);
-                        EchoString.Append($"Weapon {w.CustomName}  =>  Total Heat: {heatLevel} => Delay: {calculatedDelay} | Actual Delay: {w.GetValue<float>("Burst Delay")} \n");
                     }
-                    
-                    
-                });
-                
-                
+                    else if (heatLevel >= 43000f)
+                    {
+                        w.SetValue<bool>("WC_Shoot", true);
+                        calculatedDelay = 30;
+                        delayStatus = "!!!!!!! OVERHEATING !!!!!!!!";
+                    } else if (projectiles.Item2 < 40)
+                    {
+                        calculatedDelay = 5;
+                    }
+
+                    w.SetValue<float>("Burst Delay", calculatedDelay);
+
+                    EchoString.Append($"Weapon {w.CustomName}  =>  Total Heat: {heatLevel} => Delay: {calculatedDelay} | Actual Delay: {w.GetValue<float>("Burst Delay").ToString()} {delayStatus}\n");
+                }
             }
+
             Echo(EchoString.ToString());
-            Echo(mode.ToString());
+
+            // Rails Management
+            Echo("Current Rail mode: " + mode.ToString());
             if (mode == 0)
             {
                 WeaponsRails.ForEach(w =>
@@ -287,20 +275,20 @@ namespace IngameScript
 
         }
 
-        public void GetTargetInfo(MyDetectedEntityInfo info)
-        {
-            if (info.IsEmpty())
-            {
-                EchoString.Append("None\n");
-                return;
-            }
-            EchoString.Append("Id: " + info.EntityId + "\n");
-            EchoString.Append("Name: " + info.Name + "\n");
-            EchoString.Append("Type: " + info.Type + "\n");
-            EchoString.Append("HitPosition: " + (info.HitPosition == null ? "unknown" : info.HitPosition.ToString()) + "\n");
-            EchoString.Append("Relation: " + info.Relationship.ToString() + "\n");
-            EchoString.Append("Position: " + info.Position.ToString() + "\n");
-        }
+        //public void GetTargetInfo(MyDetectedEntityInfo info)
+        //{
+        //    if (info.IsEmpty())
+        //    {
+        //        EchoString.Append("None\n");
+        //        return;
+        //    }
+        //    EchoString.Append("Id: " + info.EntityId + "\n");
+        //    EchoString.Append("Name: " + info.Name + "\n");
+        //    EchoString.Append("Type: " + info.Type + "\n");
+        //    EchoString.Append("HitPosition: " + (info.HitPosition == null ? "unknown" : info.HitPosition.ToString()) + "\n");
+        //    EchoString.Append("Relation: " + info.Relationship.ToString() + "\n");
+        //    EchoString.Append("Position: " + info.Position.ToString() + "\n");
+        //}
 
         public class WcPbApi
         {
