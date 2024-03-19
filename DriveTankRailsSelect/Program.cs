@@ -1,4 +1,6 @@
-﻿using Sandbox.Game.Gui;
+﻿using Sandbox.Game;
+using Sandbox.Game.Entities;
+using Sandbox.Game.Gui;
 using Sandbox.Game.WorldEnvironment.Modules;
 using Sandbox.ModAPI.Ingame;
 using Sandbox.ModAPI.Interfaces;
@@ -13,6 +15,8 @@ using VRage;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.Game.ModAPI.Ingame;
+using VRage.Game.ModAPI.Ingame.Utilities;
+using VRage.Utils;
 
 namespace IngameScript
 {
@@ -32,7 +36,10 @@ namespace IngameScript
          */
         List<IMyCargoContainer> containers = new List<IMyCargoContainer>();
         List<IMyShipConnector> ejectConnectors = new List<IMyShipConnector>();
+        List<IMyShipConnector> myShipConnectors = new List<IMyShipConnector>();
         List<MyInventoryItem?> inventoryC = new List<MyInventoryItem?>();
+
+        MyIni _ini = new MyIni();
 
         public Program()
         {
@@ -43,6 +50,7 @@ namespace IngameScript
             // Fetch a log text panel
             _logOutput = GridTerminalSystem.GetBlockWithName("XDR-Weezel.LCD.Log LCD") as IMyTextPanel; // Set the name here so the script can get the lcd to put Echo to
 
+            GridTerminalSystem.GetBlocksOfType<IMyShipConnector>(myShipConnectors, b => b.CustomName.Contains("Connector"));
 
             GridTerminalSystem.GetBlocksOfType<IMyCargoContainer>(containers, c => c.CubeGrid == Me.CubeGrid);
 
@@ -56,6 +64,34 @@ namespace IngameScript
             mainDrivesCompsMin.Add("FusionComponent", 240);
             mainDrivesCompsMin.Add("Superconductor", 2000);
             mainDrivesCompsMin.Add("LargeTube", 720);
+
+            if (Me.CustomData.Length > 0)
+            {
+                MyIniParseResult result;
+                if (!_ini.TryParse(Me.CustomData, out result))
+                    throw new Exception(result.ToString());
+
+                mainDrivesCompsMin.Keys.ToList().ForEach(item =>
+                {
+                    int amount = int.Parse(_ini.Get("Main", item).ToString());
+
+                    mainDrivesCompsMin[item] = amount;
+                });
+            }
+            else
+            {
+                MyIniParseResult result;
+                if (!_ini.TryParse(Me.CustomData, out result)) throw new Exception(result.ToString());
+
+                mainDrivesCompsMin.Keys.ToList().ForEach(item =>
+                {
+                    Echo(item);
+
+                    _ini.Set("Main", item, mainDrivesCompsMin[item].ToString());
+                });
+
+                Me.CustomData = _ini.ToString();
+            }
         }
 
         Dictionary<string, MyFixedPoint> mainDrivesCompsMin = new Dictionary<string, MyFixedPoint>();
@@ -75,6 +111,7 @@ namespace IngameScript
         }
 
         int iteration = 0;
+        int mode = 0;
 
         public void Main(string argument, UpdateType updateSource)
         {
@@ -83,6 +120,16 @@ namespace IngameScript
             Echo(iteration.ToString());
             items.Clear();
             GetItems();
+            TransferItemsFromConnectorsToCargo();
+
+            if (argument == "0")
+            {
+                mode = 0;
+            }
+            else if (argument == "1")
+            {
+                mode = 1;
+            }
 
             Report rep = GetCouterRepairs();
 
@@ -286,6 +333,30 @@ namespace IngameScript
             return rep;
         }
 
+        void TransferItemsFromConnectorsToCargo()
+        {
+            myShipConnectors.ForEach(conn =>
+            {
+                VRage.Game.ModAPI.Ingame.IMyInventory inventory = conn.GetInventory();
+                List<MyInventoryItem> items = new List<MyInventoryItem> ();
+                inventory.GetItems(items);
+                itemsToThrowOut.ForEach(item =>
+                {
+                    foreach (var itemD in items)
+                    {
+                        containers.ForEach(con =>
+                        {
+                            if (con.GetInventory().CanItemsBeAdded(itemD.Amount, itemD.Type) && !(itemD.Type.SubtypeId.Contains("PDCBox") || itemD.Type.SubtypeId.Contains("Slug")))
+                            {
+                                con.GetInventory().TransferItemFrom(conn.GetInventory(), itemD, itemD.Amount);
+                            }
+                        });
+                    }
+                });
+
+            });
+        }
+
         // We get all items we have in the grid inventory and set them to items dictionary
         void GetItems()
         {
@@ -321,7 +392,6 @@ namespace IngameScript
                                     if (!items.ContainsKey(subtypeId))
                                     {
                                         items.Add(subtypeId, item.Value.Amount);
-                                        
                                     }
                                     else
                                     {
@@ -375,7 +445,7 @@ namespace IngameScript
                     // Use Math.Max to calculate positive difference
                     missingAmount = Math.Max(0, mainDrivesCompsMinValue - itemsValue);
 
-                    if (itemsValue > mainDrivesCompsMinValue * 1.5)
+                    if (itemsValue > mainDrivesCompsMinValue * 1.5 && mode == 1)
                     {
                         Echo(itemsValue.ToString());
                         Echo(mainDrivesCompsMinValue.ToString());
@@ -397,17 +467,20 @@ namespace IngameScript
                 }
             });
 
-            items.Keys.ToList().ForEach(key =>
+            if (mode == 1)
             {
-                itemsToThrowOut.ForEach(k =>
+                items.Keys.ToList().ForEach(key =>
                 {
-                    if(key.Contains(k))
+                    itemsToThrowOut.ForEach(k =>
                     {
-                        ThrowExcessCargo(key, (int)items[key]);
-                    }
+                        if (key.Contains(k))
+                        {
+                            ThrowExcessCargo(key, (int)items[key]);
+                        }
+                    });
                 });
-            });
-
+            }
+            
             if (counterCompsPresent < requiredComps)
             {
                 notEnoughMats = true;
