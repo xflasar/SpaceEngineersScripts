@@ -33,6 +33,8 @@ namespace IngameScript
             _logOutput = GridTerminalSystem.GetBlockWithName("XDR-Weezel.LCD.Log2 LCD") as IMyTextPanel; // Set the name here so the script can get the lcd to put Echo to
             GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(WeaponsRails, b => b.CustomName.ToLower().Contains("rail"));
             GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(Weapons, b => b.CustomName.ToLower().Contains("pdc"));
+            GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(batteries, b => b.CustomName.ToLower().Contains("battery"));
+
         }
 
         IMyTextPanel _logOutput;
@@ -49,6 +51,7 @@ namespace IngameScript
 
         public List<IMyTerminalBlock> Weapons = new List<IMyTerminalBlock>();
         public List<IMyTerminalBlock> WeaponsRails = new List<IMyTerminalBlock>();
+        public List<IMyTerminalBlock> batteries = new List<IMyTerminalBlock>();
         //public List<string> targetTypes = new List<string>();
         private StringBuilder EchoString = new StringBuilder();
         //IDictionary<string, int> temp = new Dictionary<string, int>();
@@ -72,6 +75,7 @@ namespace IngameScript
         // Main Method for Firing rail
         void FireAlternateWeapons()
         {
+            Echo(WeaponsRails.Count.ToString() + "\n" + currentWeaponIndex + ":" + countdown);
             if(!WeaponsRails[currentWeaponIndex].IsFunctional)
             {
                 currentWeaponIndex++;
@@ -177,7 +181,7 @@ namespace IngameScript
 
                     w.SetValue<float>("Burst Delay", calculatedDelay);
 
-                    EchoString.Append($"Weapon {w.CustomName}  =>  Total Heat: {heatLevel} => Delay: {calculatedDelay} | Actual Delay: {w.GetValue<float>("Burst Delay").ToString()} {delayStatus}\n");
+                    EchoString.Append($"Weapon {w.CustomName}  =>  Total Heat: {heatLevel} => Delay: {calculatedDelay} | Actual Delay: {w.GetValue<float>("Burst Delay")} {delayStatus}\n");
                 }
             }
 
@@ -197,7 +201,7 @@ namespace IngameScript
             }
             else if (mode == 1)
             {
-                if (Weapons.Count > 0)
+                if (WeaponsRails.Count > 0)
                 {
                     FireAlternateWeapons();
 
