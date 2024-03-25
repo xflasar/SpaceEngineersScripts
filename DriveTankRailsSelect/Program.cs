@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading;
 using System.Web;
 using VRage;
@@ -50,7 +51,7 @@ namespace IngameScript
             // Fetch a log text panel
             _logOutput = GridTerminalSystem.GetBlockWithName("XDR-Weezel.LCD.Log LCD") as IMyTextPanel; // Set the name here so the script can get the lcd to put Echo to
 
-            GridTerminalSystem.GetBlocksOfType<IMyShipConnector>(myShipConnectors, b => b.CustomName.Contains("Connector"));
+            GridTerminalSystem.GetBlocksOfType<IMyShipConnector>(myShipConnectors, b => b.CustomName.Contains("Connector") && !b.CustomName.Contains("Ejector"));
 
             GridTerminalSystem.GetBlocksOfType<IMyCargoContainer>(containers, c => c.CubeGrid == Me.CubeGrid);
 
@@ -121,6 +122,11 @@ namespace IngameScript
             items.Clear();
             GetItems();
             TransferItemsFromConnectorsToCargo();
+
+            if(mode == 1)
+            {
+                ThrowOutItems();
+            }
 
             if (argument == "0")
             {
@@ -340,20 +346,48 @@ namespace IngameScript
                 VRage.Game.ModAPI.Ingame.IMyInventory inventory = conn.GetInventory();
                 List<MyInventoryItem> items = new List<MyInventoryItem> ();
                 inventory.GetItems(items);
+                
+                foreach (var itemD in items)
+                {
+                    containers.ForEach(con =>
+                    {
+                        if (con.GetInventory().CanItemsBeAdded(itemD.Amount, itemD.Type) && !(itemD.Type.SubtypeId.Contains("PDCBox") || itemD.Type.SubtypeId.Contains("Slug")))
+                        {
+                            con.GetInventory().TransferItemFrom(conn.GetInventory(), itemD, itemD.Amount);
+                        }
+                    });
+                }
+            });
+        }
+
+        void ThrowOutItems()
+        {
+            containers.ForEach(c =>
+            {
                 itemsToThrowOut.ForEach(item =>
                 {
-                    foreach (var itemD in items)
+                    var inventory = c.GetInventory();
+                    List<MyInventoryItem> myInventoryItems = new List<MyInventoryItem>();
+
+                    inventory.GetItems(myInventoryItems);
+
+                    foreach (var inventoryItem in myInventoryItems)
                     {
-                        containers.ForEach(con =>
+                        if (inventoryItem.Type.SubtypeId.Contains(item))
                         {
-                            if (con.GetInventory().CanItemsBeAdded(itemD.Amount, itemD.Type) && !(itemD.Type.SubtypeId.Contains("PDCBox") || itemD.Type.SubtypeId.Contains("Slug")))
+                            ejectConnectors.ForEach(ej =>
                             {
-                                con.GetInventory().TransferItemFrom(conn.GetInventory(), itemD, itemD.Amount);
-                            }
-                        });
+                                if (ej.GetInventory().CanItemsBeAdded(inventoryItem.Amount, inventoryItem.Type))
+                                {
+                                    ej.GetInventory().TransferItemFrom(inventory, inventoryItem, inventoryItem.Amount);
+                                } else
+                                {
+                                    Echo(inventoryItem.Type.SubtypeId + ":" + inventoryItem.Amount);
+                                }
+                            });
+                        }
                     }
                 });
-
             });
         }
 
@@ -418,7 +452,10 @@ namespace IngameScript
             "Computer",
             "Small",
             "Interior",
-            "Girder"
+            "Girder",
+            "Motor",
+            "Scrap",
+            "Reactor"
         };
 
         // Prints out mainDrivesCompsMin Dictionary components in a format of: ItemName: itemAmount/mainDrivesCompsMinAmount can repair itemsMaxRepairTimes
