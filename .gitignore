@@ -6,3 +6,4 @@ obj
 bin
 .vs
 */packages/Mal.Mdk2.PbPackager.2.0.0-alpha032
+*.zip

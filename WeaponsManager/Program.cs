@@ -1,43 +1,38 @@
-﻿using Sandbox.Game.EntityComponents;
-using Sandbox.ModAPI.Ingame;
+﻿using Sandbox.ModAPI.Ingame;
 using Sandbox.ModAPI.Interfaces;
-using SpaceEngineers.Game.ModAPI.Ingame;
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
 using System.Text;
 using VRage;
-using VRage.Collections;
 using VRage.Game;
-using VRage.Game.Components;
-using VRage.Game.GUI.TextPanel;
-using VRage.Game.ModAPI.Ingame;
-using VRage.Game.ModAPI.Ingame.Utilities;
-using VRage.Game.ObjectBuilders.Definitions;
 using VRageMath;
 
 namespace IngameScript
 {
     partial class Program : MyGridProgram
     {
-
+        static public Program pInstance = null;
+        public List<IMyTextPanel> myTextPanels = new List<IMyTextPanel>();
         public Program()
         {
+            pInstance = this;
             Runtime.UpdateFrequency = UpdateFrequency.Update10;
 
             Echo = EchoToLCD;
 
             // Fetch a log text panel
-            _logOutput = GridTerminalSystem.GetBlockWithName("XDR-Weezel.LCD.Log2 LCD") as IMyTextPanel; // Set the name here so the script can get the lcd to put Echo to
+            
+            GridTerminalSystem.GetBlocksOfType<IMyTextPanel>(myTextPanels);
             GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(WeaponsRails, b => b.CustomName.ToLower().Contains("rail"));
             GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(Weapons, b => b.CustomName.ToLower().Contains("pdc"));
             GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(batteries, b => b.CustomName.ToLower().Contains("battery"));
 
+            _logOutput = myTextPanels.Find(t => t.CustomName.Contains("WeaponLog")); // Set the name here so the script can get the lcd to put Echo to
+
         }
 
         IMyTextPanel _logOutput;
+
         public void EchoToLCD(string text)
         {
             // Append the text and a newline to the logging LCD
@@ -47,92 +42,23 @@ namespace IngameScript
             _logOutput?.WriteText($"{text}\n", true);
         }
 
-        public static WcPbApi api;
+        public WcPbApi api;
 
         public List<IMyTerminalBlock> Weapons = new List<IMyTerminalBlock>();
         public List<IMyTerminalBlock> WeaponsRails = new List<IMyTerminalBlock>();
         public List<IMyTerminalBlock> batteries = new List<IMyTerminalBlock>();
         //public List<string> targetTypes = new List<string>();
-        private StringBuilder EchoString = new StringBuilder();
+        public StringBuilder EchoString = new StringBuilder();
+
+        
         //IDictionary<string, int> temp = new Dictionary<string, int>();
-        int mode = 0;
-
-        // Does it work? Yeah kinda can be better
-        static int CalculateDelay(double totalHeat)
-        {
-            double heatDelayFactor = 30.0 / (44800.0 - 40000.0);
-            double delay = heatDelayFactor * (totalHeat - 40000);
-
-            int result = (int)Math.Max(0, Math.Min(30, delay)); // Ensure the result is between 0 and 30
-            return result;
-        }
-
-        bool weaponFiring = false;
-        int firingDelay = 20;
-        int currentWeaponIndex = 0;
-        int countdown = 0;
-
-        // Main Method for Firing rail
-        void FireAlternateWeapons()
-        {
-            Echo(WeaponsRails.Count.ToString() + "\n" + currentWeaponIndex + ":" + countdown);
-            if(!WeaponsRails[currentWeaponIndex].IsFunctional)
-            {
-                currentWeaponIndex++;
-                return;
-            }
-            if (!WeaponsRails[currentWeaponIndex].GetValueBool("OnOff"))
-            {
-                WeaponsRails[currentWeaponIndex].SetValueBool("OnOff", true);
-                return;
-            }
-
-            if (countdown > 0)
-            {
-                countdown--;
-                return;
-            }
-
-            if (!api.IsWeaponReadyToFire(WeaponsRails[currentWeaponIndex]) || weaponFiring)
-            {
-                return;
-            }
-
-            if (!CanShootTarget(WeaponsRails[currentWeaponIndex]))
-            {
-                return;
-            }
-
-            // Fire the current weapon
-            api.FireWeaponOnce(WeaponsRails[currentWeaponIndex]);
-
-            countdown = firingDelay;
-
-            // Switch to the next weapon
-            currentWeaponIndex = (currentWeaponIndex + 1) % WeaponsRails.Count;
-        }
-
-
-        // Method for checking if we can shoot the target with weapon
-        bool CanShootTarget(IMyTerminalBlock weapon)
-        {
-            try
-            {
-                // Check if the weapon can shoot the target
-                return api.CanShootTarget(weapon, api.GetWeaponTarget(weapon).Value.EntityId, 0);
-            }
-            catch (Exception ex)
-            {
-                Echo("Error checking if weapon can shoot target: " + ex.Message);
-                return false;
-            }
-        }
+        string mode = "";
 
         public void Main(string argument, UpdateType updateSource)
         {
             if (argument != "")
             {
-                int.TryParse(argument, out mode);
+                mode = argument;
             }
 
 
@@ -150,46 +76,24 @@ namespace IngameScript
             EchoString.Clear();
 
             // PDC Management
-            Echo("PDC Management: \nPDC count: " + Weapons.Count.ToString() + "\n");
+            Echo("PDC Management: \nPDC count: " + Weapons.Count.ToString() + "\n Test");
             if (Weapons.Count > 0)
             {
-                MyTuple<bool, int, int> projectiles = api.GetProjectilesLockedOn(Me.EntityId);
-
-                Echo(projectiles.Item1 + ":" + projectiles.Item2 + ":" + projectiles.Item3);
-                foreach (var w in Weapons)
+                try
                 {
-                    float heatLevel = api.GetHeatLevel(w);
-                    int calculatedDelay = 1;
-                    string delayStatus = "";
-                    w.SetValue<bool>("WC_Shoot", false);
-
-                    if (heatLevel > 40000f && heatLevel < 44000f)
-                    {
-                        w.SetValue<bool>("WC_Shoot", true);
-                        double totalHeat = heatLevel;
-                        calculatedDelay = CalculateDelay(totalHeat);
-                    }
-                    else if (heatLevel >= 43000f)
-                    {
-                        w.SetValue<bool>("WC_Shoot", true);
-                        calculatedDelay = 30;
-                        delayStatus = "!!!!!!! OVERHEATING !!!!!!!!";
-                    } else if (projectiles.Item2 < 40)
-                    {
-                        calculatedDelay = 5;
-                    }
-
-                    w.SetValue<float>("Burst Delay", calculatedDelay);
-
-                    EchoString.Append($"Weapon {w.CustomName}  =>  Total Heat: {heatLevel} => Delay: {calculatedDelay} | Actual Delay: {w.GetValue<float>("Burst Delay")} {delayStatus}\n");
+                    PDCMain();
+                } catch (Exception ex)
+                {
+                    Echo(ex + "errored here");
                 }
             }
 
             Echo(EchoString.ToString());
 
             // Rails Management
-            Echo("Current Rail mode: " + mode.ToString());
-            if (mode == 0)
+            Echo("Current Rail mode: " + mode);
+
+            if (mode == "RailsOff")
             {
                 WeaponsRails.ForEach(w =>
                 {
@@ -199,27 +103,17 @@ namespace IngameScript
                     }
                 });
             }
-            else if (mode == 1)
+            else if (mode == "TargetedStaggerShooting")
             {
                 if (WeaponsRails.Count > 0)
                 {
                     FireAlternateWeapons();
-
                 }
-            } else if (mode == 2)
+            } else if (mode == "AIShoot")
             {
-                if (api.GetAiFocus(Me.CubeGrid.EntityId).Value.Name != null)
+                if (WeaponsRails.Count > 0)
                 {
-                    if (Weapons.Count > 0)
-                    {
-                        FireAlternateWeapons();
-
-                    }
-                }
-                else
-                {
-                    api.ReleaseAiFocus(Me, Me.CubeGrid.EntityId);
-                    Echo("No targets focused!!");
+                    SetRailsAutofire();
                 }
             }
 
