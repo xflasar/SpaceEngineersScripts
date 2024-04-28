@@ -7,6 +7,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Net;
 using System.Text;
 using Sandbox.Game.Entities;
 using VRage;
@@ -50,6 +51,10 @@ namespace IngameScript
         private bool _WCFail = false;
 
         private string mode = "OnlyDisplay";
+        private bool _debug = false;
+
+        // More shield controllers are breaking up power management available power
+        // 
 
         public Program()
         {
@@ -121,10 +126,16 @@ namespace IngameScript
         {
             if (argument != String.Empty)
             {
+                if (argument == "Debug")
+                {
+                    _debug = !_debug;
+                    return;
+                }
                 int arg = Int32.MinValue;
                 if(!int.TryParse(argument, out arg))
                 mode = argument;
 
+                
 
             }
 
@@ -136,6 +147,7 @@ namespace IngameScript
             EchoString.Clear();
             Echo(mode);
 
+            PrintWeapons();
 
             // Get sorted enemies
             GetSortedEnemies();
@@ -158,30 +170,45 @@ namespace IngameScript
             } 
             else if (mode == "BattleMode")
             {
-                if (api.GetAiFocus(Me.EntityId).HasValue && !api.GetAiFocus(Me.CubeGrid.EntityId).Value.IsEmpty())
+                // non functional
+                if (forceReload)
+                {
+                    if (phasers.Count == 0) return;
+                    Echo("\n=== ...Weapon Manager Booting... ===");
+                    Echo("\n=== FORCE RELOAD IN PROGRESS ===");
+                    phasers.ForEach(ph =>
+                    {
+
+                        if (ph._phaser.GetValueBool("OnOff"))
+                        {
+                            if (api.GetCurrentPower(ph._phaser) <= ph._minPower)
+                            {
+                                ph._phaser.SetValueBool("OnOff", false);
+                                phasersForceReloadedInit++;
+                                ph._recharging = false;
+                                ph._readyToFire = true;
+                            }
+                        }
+                        else
+                        {
+                            ph._phaser.SetValueBool("OnOff", true);
+                        }
+                    });
+                    Echo("\n");
+                    if (phasersForceReloadedInit >= phasers.Count) forceReload = false;
+                }
+                else
                 {
                     _target = api.GetAiFocus(Me.CubeGrid.EntityId).Value.EntityId;
                     try
                     {
                         FireAtTarget();
-                        FireDisruptors();
+                        // FireDisruptors(); Will be added later
                     }
                     catch (Exception e)
                     {
                         Echo("problem firing: " + e);
                         throw new Exception();
-                    }
-                }
-                else if (_target != 0)
-                {
-                    try
-                    {
-                        api.SetAiFocus(Me, _target);
-                    }
-                    catch (Exception)
-                    {
-                        // We don't need to raise Exception just default target to 0
-                        _target = 0;
                     }
                 }
             }

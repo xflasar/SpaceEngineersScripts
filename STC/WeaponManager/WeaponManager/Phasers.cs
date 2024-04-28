@@ -9,30 +9,30 @@ using Sandbox.ModAPI.Interfaces;
 using SpaceEngineers.Game.Achievements;
 using VRage.Game;
 using VRageMath;
+using VRageRender;
 using VRageRender.Messages;
 
 namespace IngameScript
 {
     partial class Program : MyGridProgram
     {
-        private int _phasersMaxRecharge = 0;
-        private int _phasersActiveCurrently = 0;
         public Dictionary<MyDetectedEntityInfo, float> enemies = new Dictionary<MyDetectedEntityInfo, float>();
-        private List<IMyTerminalBlock> _weapsInRechargeQueue = new List<IMyTerminalBlock>();
 
         private List<Phaser> phasers = new List<Phaser>();
-        private List<Phaser> _phasersToShoot = new List<Phaser>();
         private List<Phaser> _reloadingPhasers = new List<Phaser>();
 
-        private List<Phaser> _activeRechargePhasersList = new List<Phaser>();
-        private List<Phaser> _passiveRechargePhasersList = new List<Phaser>();
-
-        private int _activeRechargePhasers = 0;
+        private double _currentRechargingPowerUse = 0;
 
         private double _currPower = 0;
         private double _maxAvailablePower = 0;
 
+        private int _selectiveCounterPhasers = 4;
+
+        private bool firstRun = false;
+        private bool forceReload = false;
+
         private long _target = 0;
+        private long _lastTargetBlock = 0;
 
         private class Phaser
         {
@@ -40,13 +40,19 @@ namespace IngameScript
             public IMyTerminalBlock _phaser;
             public int _firingCycleTimer;
             public bool _recharging;
-            public float _currentPower;
+            public double _currentPower;
             public float _minPower;
             public bool _readyToFire;
             public long _target;
             public int _maxChargePower;
+            public bool _firing;
+            public double _chargeSize;
+            public double _minChargePower;
+            public double _currentPowerUsing;
+            public bool _passiveRecharging;
+            public bool _activeRecharging;
 
-            public Phaser(IMyTerminalBlock phaser, float _mPower, float cPower)
+            public Phaser(IMyTerminalBlock phaser, double cPower)
             {
                 _phaser = phaser;
                 _firingCycleTimer = 10;
@@ -55,26 +61,57 @@ namespace IngameScript
                 _readyToFire = true;
                 _currentPower = cPower;
                 _target = 0;
+                _firing = false;
+                _passiveRecharging = false;
+                _activeRecharging = false;
+                _currentPowerUsing = 0;
 
                 if (cPower >= 100 && cPower <= 101)
                 {
                     _minPower = 101;
                     _maxChargePower = 1410;
+                    _chargeSize = 676800;
+                    _minChargePower = CalculateMaxRechargePower(_chargeSize);
                 } else if(cPower >= 150 && cPower <= 151)
                 {
                     _minPower = 151;
                     _maxChargePower = 2342;
+                    _chargeSize = 1108800;
+                    _minChargePower = CalculateMaxRechargePower(_chargeSize);
                 } else if (cPower >= 200 && cPower <= 201)
                 {
                     _minPower = 201;
                     _maxChargePower = 3343;
+                    _chargeSize = 1604448;
+                    _minChargePower = CalculateMaxRechargePower(_chargeSize);
                 }
+            }
+
+            double CalculateMaxRechargePower(double chargeSize)
+            {
+                return chargeSize / (16 * 60);
             }
         }
 
+        private int phasersForceReloadedInit = 0;
+
+        void CheckCorrectSettings(IMyTerminalBlock phas, MyDefinitionId t)
+        {
+            phas.SetValueBool("OnOff", true);
+            double currentPower = api.GetCurrentPower(phas);
+            
+            if(currentPower == 0)
+                while (currentPower == 0)
+                {
+                    currentPower = api.GetCurrentPower(phas);
+                }
+
+            Phaser pha = new Phaser(phas, currentPower);
+
+            phasers.Add(pha);
+        }
         void InitPhasers()
         {
-
             List<MyDefinitionId> turrets = new List<MyDefinitionId>();
             api.GetAllCoreTurrets(turrets);
 
@@ -84,11 +121,34 @@ namespace IngameScript
                 {
                     if (t.SubtypeId.ToString() == phas.BlockDefinition.SubtypeId)
                     {
-                        Phaser pha = new Phaser(phas, api.GetMaxPower(t), api.GetCurrentPower(phas));
-                        phasers.Add(pha);
+                        CheckCorrectSettings(phas, t);
                     }
                 });
             });
+
+            //// ForceReload
+            //phasers.ForEach(phaser =>
+            //{
+            //    if (phaser._maxChargePower == 0)
+            //    {
+            //        InitPhasers();
+            //        return;
+            //    }
+
+            //    if (phaser._phaser.GetValueBool("OnOff"))
+            //    {
+            //        phaser._phaser.ApplyAction("ForceReload");
+            //        phaser._readyToFire = false;
+            //        phaser._recharging = true;
+            //    }
+            //    else
+            //    {
+            //        phaser._phaser.SetValueBool("OnOff", true);
+            //        phaser._phaser.ApplyAction("ForceReload");
+            //        phaser._readyToFire = false;
+            //        phaser._recharging = true;
+            //    }
+            //});
         }
 
         void ShutdownWeapons()
@@ -104,67 +164,61 @@ namespace IngameScript
 
         void CheckRechargeWeapons()
         {
+            int activeRechargeCount = 0;
+            int passiveRechargeCount = 0;
             // Create a list to store phasers to remove
-            List<Phaser> phasersToRemove = new List<Phaser>();
-
-            // Iterate over _reloadingPhasers
-            foreach (Phaser ph in _reloadingPhasers)
+            if (_currentRechargingPowerUse < 0) _currentRechargingPowerUse = 0;
+            
+            foreach (Phaser ph in phasers)
             {
-                if (_activeRechargePhasers > _phasersMaxRecharge && !_passiveRechargePhasersList.Contains(ph) && !_activeRechargePhasersList.Contains(ph))
+
+                if (!ph._recharging) continue;
+                // Calculate the recharge power for the phaser (half of maxChargePower)
+                double phaserRechargePower = ph._minChargePower;
+
+                // Check if adding the phaser's recharge power to the current recharging power exceeds the maximum available power
+                if ((_currentRechargingPowerUse + phaserRechargePower) > _maxAvailablePower && !ph._activeRecharging)
                 {
+                    ph._activeRecharging = false;
+                    ph._passiveRecharging = true;
                     ph._phaser.ApplyAction("OnOff_Off");
-                    _passiveRechargePhasersList.Add(ph);
-                    continue;
                 }
-                else
+                else if(!ph._activeRecharging)
                 {
-                    if(!_activeRechargePhasersList.Contains(ph))
-                    {
-                        _passiveRechargePhasersList.Remove(ph);
-                        _activeRechargePhasersList.Add(ph);
-                        ph._phaser.ApplyAction("OnOff_On");
-                        _activeRechargePhasers++;
-                        continue;
-                    }
+                    ph._passiveRecharging = false;
+                    ph._activeRecharging = true;
+                    ph._phaser.ApplyAction("OnOff_On");
+                    _currentRechargingPowerUse += phaserRechargePower;
                 }
-            }
-
-            foreach (Phaser ph in _activeRechargePhasersList)
-            {
 
                 ph._currentPower = api.GetCurrentPower(ph._phaser);
 
-                if (ph._currentPower > ph._minPower)
+                if (ph._currentPower > ph._minPower && !(ph._currentPower < ph._minPower - 1))
                 {
                     ph._recharging = true;
+
+                    if (ph._activeRecharging)
+                    {
+                        activeRechargeCount++;
+                    }
+                    else if (ph._passiveRecharging)
+                    {
+                        passiveRechargeCount++;
+                    }
                 }
                 else
                 {
                     ph._recharging = false;
                     ph._readyToFire = true;
                     ph._firingCycleTimer = 10;
-                    
-
-                    // Add the phaser to the list of items to remove
-                    phasersToRemove.Add(ph);
+                    ph._activeRecharging = false;
+                    ph._passiveRecharging = false;
+                    _currentRechargingPowerUse -= ph._minChargePower;
+                    ph._currentPowerUsing = 0;
                 }
             }
 
-            // Remove phasers marked for removal
-            foreach (Phaser phaserToRemove in phasersToRemove)
-            {
-                _activeRechargePhasersList.Remove(phaserToRemove);
-                _reloadingPhasers.Remove(phaserToRemove);
-                _activeRechargePhasers--;
-                if (_passiveRechargePhasersList.Count > 0)
-                {
-                    _activeRechargePhasersList.Add(_passiveRechargePhasersList.Pop());
-                    _activeRechargePhasers++;
-
-                }
-            }
-
-            Echo($"Recharging phasers: {_activeRechargePhasersList.Count}/{_passiveRechargePhasersList.Count}");
+            Echo($"Recharging phasers active: {activeRechargeCount} | Passive:{passiveRechargeCount} || current Charging power: {_currentRechargingPowerUse}");
         }
 
 
@@ -175,7 +229,7 @@ namespace IngameScript
 
             try
             {
-                EchoString.Append("Enemy: " + enemies.Count() + "\n");
+                EchoString.Append("Enemy: " + enemies.Count() + "\n\n");
                 enemies.Keys.ToList().ForEach(targetEnemies =>
                 {
                     bool _isLocked = false;
@@ -193,7 +247,7 @@ namespace IngameScript
 
                     EchoString.Append($"Enemy: {targetEnemies.Name} || Enemy Speed: {targetEnemies.Velocity} || Locked ON: {_isLocked} || Weapons targeting: {_weapsActive}\n");
                 });
-                Echo("\n");
+                Echo("\n\n");
             }
             catch (Exception e)
             {
@@ -202,20 +256,31 @@ namespace IngameScript
             
         }
 
-        void SelectPhasersToFire()
+        int CalculatePhasersCount(double availablePower, double maxChargePower)
         {
-            Echo($"{_phasersActiveCurrently}|{_phasersMaxRecharge}");
+            return (int)Math.Floor(availablePower / maxChargePower);
+        }
+
+        void AddPhaser()
+        {
+            //Echo($"Run {_phasersActiveCurrently}|{_phasersMaxRecharge}");
+            double powaCur = 0;
             foreach (Phaser ph in phasers)
             {
-                Echo($"Phaser: {ph._phaser.CustomName}\nFiring cycle: {ph._firingCycleTimer} => ReadyToFire: {ph._readyToFire} => IsRecharging: {ph._recharging} => Recharge power: {ph._maxChargePower}\n");
-                
-                if (_currPower + ph._maxChargePower < _maxAvailablePower && !_phasersToShoot.Contains(ph) && ph._readyToFire && !ph._recharging)
+                _currPower = 0;
+                phasers.ForEach(phas =>
+                {
+                    _currPower += phas._currentPowerUsing;
+                });
+
+                if (_currPower + ph._minChargePower > _maxAvailablePower) continue;
+
+                if (ph._readyToFire && !ph._recharging && !ph._firing)
                 {
                     if(!ph._phaser.GetValueBool("OnOff")) ph._phaser.ApplyAction("OnOff_On");
-                    _phasersToShoot.Add(ph);
-                    _phasersActiveCurrently++;
-                    _currPower += ph._maxChargePower / 2f;
-                    continue;
+                    ph._firing = true;
+                    ph._currentPowerUsing = ph._minChargePower;
+                    //Echo(ph._currentPowerUsing + "+" + ph._minChargePower);
                 }
             };
         }
@@ -231,45 +296,129 @@ namespace IngameScript
             });
         }
 
+        void PrintWeapons()
+        {
+            int longestPhaserName = 0;
+
+            phasers.ForEach(phaser =>
+            {
+                if(phaser._phaser.CustomName.Length > longestPhaserName)
+                longestPhaserName = phaser._phaser.CustomName.Length;
+
+                if (_debug)
+                {
+                    EchoString.Append($"Phaser: {phaser._phaser.CustomName}\nFiring cycle: {phaser._firingCycleTimer} => ReadyToFire: {phaser._readyToFire} => IsRecharging: {phaser._recharging} => Recharge power: {phaser._maxChargePower} => Current Draw: {api.GetCurrentPower(phaser._phaser)}\n => MinChargePower: {phaser._minChargePower} => CurrentPowerUsing: {phaser._currentPowerUsing}\n");
+                }
+                else
+                {
+                    string status = "Idle";
+
+                    if (phaser._firing) status = "Firing";
+                    if (phaser._recharging) status = "Recharging";
+
+                    string targetInfo = "";
+
+                    if (phaser._target != 0) targetInfo = $" || Target: {api.GetWeaponTarget(phaser._phaser, 0).Value.Name}";
+
+                    string phaserName = phaser._phaser.CustomName;
+
+                    if (phaserName.Length < longestPhaserName)
+                    {
+                        StringBuilder paddedName = new StringBuilder(phaserName);
+                        for (int i = 0; i < longestPhaserName - phaserName.Length; i++)
+                        {
+                            paddedName.Append(' ');
+                        }
+                        phaserName = paddedName.ToString();
+                    }
+                    string phaserState = "OFF";
+
+                    if (phaser._phaser.GetValueBool("OnOff"))
+                    {
+                        phaserState = "ON";
+                    }
+
+                    EchoString.Append($"Phaser: {phaserName} [{phaserState}] === {status}" + targetInfo + "\n");
+                }
+            });
+            EchoString.Append("\n\n");
+        }
+
         void FireAtTarget()
         {
-            CheckRechargeWeapons();
-            SelectPhasersToFire();
+            if (firstRun)
+            {
+                AddPhaser();
+                firstRun = false;
+            }
 
-            // Create a list to store phasers to remove
-            List<Phaser> phasersToRemove = new List<Phaser>();
-            if (_phasersToShoot.Count == 0) _phasersActiveCurrently = 0;
+            if (_selectiveCounterPhasers == 0)
+            {
+                AddPhaser();
+                _selectiveCounterPhasers = 4;
+            }
+            else
+            {
+                _selectiveCounterPhasers--;
+            }
+
+            Echo($"Next phaser add rotation: {_selectiveCounterPhasers}");
+
+            CheckRechargeWeapons();
             
-            // Iterate over _phasersToShoot
-            foreach (Phaser phaser in _phasersToShoot)
+            // Iterate over phasers
+            foreach (Phaser phaser in phasers)
             {
                 Phaser ph = phaser;
 
+                if(!ph._firing) continue;
+
                 ph._currentPower = api.GetCurrentPower(ph._phaser);
 
-                if (ph._firingCycleTimer == 7)
+                if (ph._firingCycleTimer == 3)
                 {
-                    _phasersActiveCurrently--;
-                    _currPower -= ph._maxChargePower / 2f;;
+                    ph._currentPowerUsing = 0;
+                    //Echo("Run Dead - power  " + ph._currentPowerUsing);
                 }
 
                 // Check if current phaser is reloading or not; if not, it defaults to minPower of the phaser
-                if (ph._currentPower > ph._minPower)
+                if (ph._currentPower > ph._minPower || ph._firingCycleTimer <= 0)
                 {
                     //Echo($"Removing phaser due to {ph._currentPower}/{ph._minPower}");
-                    _reloadingPhasers.Add(ph);
+                    ph._recharging = true;
                     ph._readyToFire = false;
+                    ph._firing = false;
                     ph._firingCycleTimer = 10;
 
-                    // Add the phaser to the list of items to remove
-                    phasersToRemove.Add(ph);
+                    if (ph._currentPowerUsing > 0)
+                    {
+                        ph._currentPowerUsing = 0;
+                        //Echo("ED " + ph._currentPowerUsing);
+                    }
                     continue;
                 }
+
+                if(!ph._phaser.GetValueBool("OnOff")) ph._phaser.ApplyAction("OnOff_On");
 
                 // Fire weapon
                 try
                 {
-                    if (!api.CanShootTarget(ph._phaser, api.GetWeaponTarget(ph._phaser).Value.EntityId, 0)) continue;
+                    if (api.GetWeaponTarget(ph._phaser).Value.IsEmpty() || !api.GetWeaponTarget(ph._phaser).HasValue)
+                    {
+                        if (api.CanShootTarget(ph._phaser, _lastTargetBlock, 0))
+                        {
+                            api.SetWeaponTarget(ph._phaser, _lastTargetBlock);
+                        }
+                        else
+                        {
+                            continue;
+                        }
+                    }
+
+                    if (!api.CanShootTarget(ph._phaser, api.GetWeaponTarget(ph._phaser).Value.EntityId, 0))
+                    {
+                        continue;
+                    }
 
                     if (!api.IsWeaponReadyToFire(ph._phaser, 0))
                     {
@@ -287,25 +436,14 @@ namespace IngameScript
                     continue;
                 }
 
-                if (ph._firingCycleTimer == 3)
-                {
-                    ph._phaser.SetValueBool("WC_Overload", true);
-                }
-
-                if (ph._readyToFire)
+                if (ph._firing && ph._readyToFire)
                 {
                     api.FireWeaponOnce(ph._phaser);
-                    ph._readyToFire = false;
                     ph._firingCycleTimer -= 1;
+                    _lastTargetBlock = api.GetWeaponTarget(ph._phaser, 0).Value.EntityId;
+                    ph._target = _lastTargetBlock;
                 }
             }
-
-            // Remove phasers marked for removal
-            foreach (Phaser phaserToRemove in phasersToRemove)
-            {
-                _phasersToShoot.Remove(phaserToRemove);
-            }
-
     }
 
     void GetMaxAvailablePower()
