@@ -26,6 +26,9 @@ namespace IngameScript
         private double _currPower = 0;
         private double _maxAvailablePower = 0;
 
+        private bool _hydroEnginesRunning = false;
+        private bool _batteriesDischarging = false;
+
         private int _selectiveCounterPhasers = 4;
 
         private bool firstRun = false;
@@ -166,8 +169,14 @@ namespace IngameScript
         {
             int activeRechargeCount = 0;
             int passiveRechargeCount = 0;
+
             // Create a list to store phasers to remove
             if (_currentRechargingPowerUse < 0) _currentRechargingPowerUse = 0;
+
+            if (activeRechargeCount > 0 || passiveRechargeCount > 0)
+            {
+                BoostWeaponsRechargeWithBatteries();
+            }
             
             foreach (Phaser ph in phasers)
             {
@@ -220,7 +229,6 @@ namespace IngameScript
 
             Echo($"Recharging phasers active: {activeRechargeCount} | Passive:{passiveRechargeCount} || current Charging power: {_currentRechargingPowerUse}");
         }
-
 
         void GetSortedEnemies()
         {
@@ -351,6 +359,8 @@ namespace IngameScript
                 AddPhaser();
                 firstRun = false;
             }
+            
+            BoostPowerWithHydrogenEngines(); // This can be done under check
 
             if (_selectiveCounterPhasers == 0)
             {
@@ -411,6 +421,7 @@ namespace IngameScript
                         }
                         else
                         {
+                            ph._phaser.ApplyAction("OnOff_Off");
                             continue;
                         }
                     }
@@ -422,6 +433,7 @@ namespace IngameScript
 
                     if (!api.IsWeaponReadyToFire(ph._phaser, 0))
                     {
+                        ph._phaser.ApplyAction("OnOff_Off");
                         ph._readyToFire = false;
                         continue;
                     }
@@ -446,7 +458,7 @@ namespace IngameScript
             }
     }
 
-    void GetMaxAvailablePower()
+        void GetMaxAvailablePower()
         {
             double maxOutput = 0;
             _reactors.ForEach(r =>
@@ -473,7 +485,7 @@ namespace IngameScript
 
             _maxAvailablePower = (maxOutput + hydroEnginePower - (_shieldPowerSet * 1000));
 
-            Echo($"Max Available Power: {_maxAvailablePower} || Current Used Power: {_currPower}");
+            Echo($"Max Available Power: {Helper_Functions.FormatText(_maxAvailablePower)} GW || Current Used Power: {Helper_Functions.FormatText(_currPower)} GW\n");
         }
 
         bool CanShootTarget(IMyTerminalBlock weapon)
@@ -489,5 +501,57 @@ namespace IngameScript
                 return false;
             }
         }
+
+        // Batteries
+        void BoostWeaponsRechargeWithBatteries()
+        {
+            _batteries.ForEach(battery =>
+            {
+                if (battery.CurrentStoredPower > 0)
+                {
+                    battery.ChargeMode = ChargeMode.Discharge;
+                    _batteriesDischarging = true;
+                }
+                else
+                {
+                    battery.ChargeMode = ChargeMode.Auto;
+                    _batteriesDischarging = false;
+                }
+            });
+        }
+
+        // Hydrogen Engines
+        void BoostPowerWithHydrogenEngines()
+        {
+            double hydroLevelSum = _hydroTanks.Sum(d => d.FilledRatio) / _hydroTanks.Count;
+            double a = 0;
+            if (hydroLevelSum < 0.1 && _hydrogenEngineGenerators.Aggregate(a, (b, engine) =>
+                {
+                    if(engine.GetValueBool("OnOff") == true)
+                    return 1;
+                    return 0;
+                }) > 0)
+            {
+                _hydrogenEngineGenerators.ForEach(hE =>
+                {
+                    hE.ApplyAction("OnOff_Off");
+                    _hydroEnginesRunning = false;
+                });
+            }
+
+            _hydrogenEngineGenerators.ForEach(hE =>
+            {
+                if (!hE.GetValueBool("OnOff") && hydroLevelSum > 0.1)
+                {
+                    hE.ApplyAction("OnOff_On");
+                    _hydroEnginesRunning = true;
+                }
+                else if (hydroLevelSum < 0.1)
+                {
+                    hE.ApplyAction("OnOff_Off");
+                    _hydroEnginesRunning = false;
+                }
+            });
+        } 
     }
 }

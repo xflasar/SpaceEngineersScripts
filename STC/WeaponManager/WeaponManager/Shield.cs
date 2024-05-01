@@ -204,24 +204,41 @@ namespace IngameScript
             string shieldStatus = "";
             if (_shield.IsShieldUp() && _shieldHP != 0) shieldStatus = "ONLINE";
 
-            EchoString.Append($"==== Shield {shieldStatus} ==> {_shieldStatus} ====\n\n");
-            EchoString.Append($"Shield Amount: {FormatShieldHP(_shieldHP)}/{FormatShieldHP(_shieldMaxHP)}\n");
-            
-            if(_shieldRecharge > 0)
-            EchoString.Append($"Shield Recharge: {FormatShieldHP(_shieldRecharge)}\n");
-            
-            EchoString.Append($"\n==== Shield Percentage {_shieldPercentage}% ====\n");
-            
-            if(_shieldHeat > 0)
-            EchoString.Append($"==== Shield Heat {_shieldHeat}% ====\n\n");
-            
-            EchoString.Append($"Shield Power Usage: {FormatShieldHP(_shieldPowerUsage)}\nPowerScale: {_shieldPowerSet}\n");
-        }
+            _shieldRecharge = 5;
 
-        string FormatShieldHP(float num)
-        {
-            return num.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("de-DE"));
-        }
+            if (_shieldHeat >= 50) shieldStatus = "OVERHEATING";
 
+            EchoString.Append($"==== Shield {shieldStatus} ==> {_shieldStatus} ==== {Helper_Functions.FormatText(_shieldPercentage)}% ====\n");
+
+            if (_shieldHeat > 0)
+                EchoString.Append($"\n==== Shield Heat {_shieldHeat}% ====\n");
+
+            EchoString.Append($"\nShield Amount: {Helper_Functions.FormatText(_shieldHP)}/{Helper_Functions.FormatText(_shieldMaxHP)}\n\n");
+
+            // Shield Info print
+            EchoString.Append("---------- Shield Info ----------\n");
+
+            bool shieldRecharge = _shieldRecharge > 0;
+
+            EchoString.Append($"Shield Recharging: {shieldRecharge}\n");
+            
+            EchoString.Append($"Shield Power Usage: {Helper_Functions.FormatText(_shieldPowerUsage)} || PowerScale: {_shieldPowerSet} GW\n");
+            
+            string shieldModulationState = "";
+
+            if (_shieldModulator.GetValueFloat("DS-M_DamageModulation") > 0)
+            {
+                shieldModulationState = "Kinetic"; 
+            } else if (_shieldModulator.GetValueFloat("DS-M_DamageModulation") == 0)
+            {
+                shieldModulationState = "Balanced";
+            }
+            else
+            {
+                shieldModulationState = "Energy";
+            }
+
+            EchoString.Append($"Shield Modulation: {shieldModulationState} || Aggreation: {_shieldModulator.GetValueBool("DS-M_AggreateModulation")}");
+        }
     }
 }

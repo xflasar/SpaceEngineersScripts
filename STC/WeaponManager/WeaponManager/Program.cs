@@ -10,6 +10,7 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using Sandbox.Game.Entities;
+using Sandbox.Game.Entities.Interfaces;
 using VRage;
 using VRage.Collections;
 using VRage.Game;
@@ -19,6 +20,7 @@ using VRage.Game.ModAPI.Ingame;
 using VRage.Game.ModAPI.Ingame.Utilities;
 using VRage.Game.ObjectBuilders.Definitions;
 using VRageMath;
+using IMyGasTank = Sandbox.ModAPI.Ingame.IMyGasTank;
 
 namespace IngameScript
 {
@@ -29,6 +31,9 @@ namespace IngameScript
 
         private IMyTerminalBlock mainShieldController;
 
+        private List<IMyTerminalBlock> shieldModulators = new List<IMyTerminalBlock>();
+        private IMyTerminalBlock _shieldModulator;
+
         private List<IMyTerminalBlock> _phasers = new List<IMyTerminalBlock>();
         private List<IMyTerminalBlock> _disruptors = new List<IMyTerminalBlock>();
         private List<IMyTerminalBlock> _pdc = new List<IMyTerminalBlock>();
@@ -38,6 +43,8 @@ namespace IngameScript
         private List<IMyReactor> _reactors = new List<IMyReactor>();
         private List<IMyBatteryBlock> _batteries = new List<IMyBatteryBlock>();
         private List<IMyPowerProducer> _hydrogenEngineGenerators = new List<IMyPowerProducer>();
+
+        private List<IMyGasTank> _hydroTanks = new List<IMyGasTank>(); 
 
         private List<IMyRadioAntenna> _antennas = new List<IMyRadioAntenna>();
 
@@ -53,6 +60,8 @@ namespace IngameScript
         private string mode = "OnlyDisplay";
         private bool _debug = false;
 
+        private bool _init = true;
+
         // More shield controllers are breaking up power management available power
         // 
 
@@ -62,24 +71,70 @@ namespace IngameScript
             Runtime.UpdateFrequency = UpdateFrequency.Update100;
 
             Echo = EchoToLCD;
+        }
 
+        void Init()
+        {
             GridTerminalSystem.GetBlocks(_blocks);
             GridTerminalSystem.GetBlocksOfType<IMyTextPanel>(myTextPanels);
             GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(_phasers, b => b.DetailedInfo.Contains("Phase Cannon") || b.DetailedInfo.Contains("Phaser Bank"));
             GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(_disruptors, b => b.GetType().FullName.ToLower().Contains("disruptor cannon"));
             GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(_pdc, b => b.GetType().FullName.ToLower().Contains("point defence phaser"));
-            
+
             GridTerminalSystem.GetBlocksOfType<IMyReactor>(_reactors);
             GridTerminalSystem.GetBlocksOfType<IMyBatteryBlock>(_batteries);
             GridTerminalSystem.GetBlocksOfType<IMyPowerProducer>(_hydrogenEngineGenerators, b => b.CubeGrid == Me.CubeGrid && b.DetailedInfo.ToLower().Contains("hydrogen engine"));
+
+            GridTerminalSystem.GetBlocksOfType<IMyGasTank>(_hydroTanks, h =>
+            {
+                if (h.DetailedInfo.ToLower().Contains("hydrogen tank"))
+                {
+                    return true;
+                }
+
+                return false;
+            });
 
             GridTerminalSystem.GetBlocksOfType<IMyRadioAntenna>(_antennas);
 
 
             GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(shieldcontrollers,
                 b => b.CubeGrid == Me.CubeGrid && b.CustomName.ToLower().Contains("shield controller"));
+            GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(shieldModulators, b => b.CubeGrid == Me.CubeGrid && b.CustomName.ToLower().Contains("shield modulator"));
+            _shieldModulator = shieldModulators.Find(a => a.CustomName.Contains("[A]"));
 
             _logOutput = myTextPanels.Find(t => t.CustomName.Contains("WeaponLog")); // Set the name here so the script can get the lcd to put Echo to
+
+            myTextPanels.ForEach(tP =>
+            {
+                if (tP == _logOutput)
+                {
+                    if (tP.CustomData.Contains("/hudlcd"))
+                    {
+                        tP.CustomData.Replace("/hudlcd", "hudlcd");
+                    }
+                    else if(!tP.CustomData.Contains("hudlcd"))
+                    {
+                        tP.CustomData = tP.CustomData + "\nhudlcd:0.5:0.6:0.8:yellow";
+                    }
+                }
+
+                if (tP.CustomName.Contains("WeaponLog") && tP != _logOutput && tP.CustomData.Contains("hudlcd"))
+                {
+                    if (!tP.CustomData.Contains("/hudlcd") && tP.CustomData.Contains("hudlcd"))
+                    {
+                        tP.CustomData.Insert(tP.CustomData.IndexOf("hudlcd"), "/");
+                    }
+                    else if (tP.CustomData.Contains("/hudlcd"))
+                    {
+                        tP.CustomData.Replace("/hudlcd", "hudlcd");
+                    }
+                    else
+                    {
+                        tP.CustomData = tP.CustomData+ "\nhudlcd:0.5:0.6:0.8:yellow";
+                    }
+                }
+            });
 
             SetUp();
             InitPhasers();
@@ -92,6 +147,7 @@ namespace IngameScript
                 ant.ApplyAction("OnOff_On");
             });
 
+            _init = false;
         }
 
         void SetUp()
@@ -122,8 +178,28 @@ namespace IngameScript
             }
         }
 
+        bool CheckInit()
+        {
+            if (_WCFail)
+            {
+                Init();
+                return false;
+            }
+
+            return true;
+        }
+
         public void Main(string argument, UpdateType updateSource)
         {
+            if (_init)
+            {
+                Init();
+                return;
+            }
+
+            if(!CheckInit()) return;
+
+
             if (argument != String.Empty)
             {
                 if (argument == "Debug")
@@ -131,11 +207,10 @@ namespace IngameScript
                     _debug = !_debug;
                     return;
                 }
+
                 int arg = Int32.MinValue;
                 if(!int.TryParse(argument, out arg))
                 mode = argument;
-
-                
 
             }
 
@@ -161,6 +236,7 @@ namespace IngameScript
                 PrintShieldStatus();
             }
 
+            Echo($"Batteries Discharge: {_batteriesDischarging} || Hydrogen Engines Running: {_hydroEnginesRunning}");
             // Used to get maxAvailablePower
             GetMaxAvailablePower();
 
