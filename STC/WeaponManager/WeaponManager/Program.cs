@@ -163,7 +163,7 @@ namespace IngameScript
                 _WCFail = true;
                 Echo("WeaponCore Api is failing! \n Make sure WeaponCore is enabled!"); return;
             }
-
+            
             if (shieldcontrollers.Count != 0)
             {
                 _shield = new ShieldApi(Me);

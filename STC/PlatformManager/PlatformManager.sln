@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.34601.136
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PlatformManager", "PlatformManager\PlatformManager.csproj", "{4FEA8A64-0D56-4598-9A2F-FF7ABA44E26A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4FEA8A64-0D56-4598-9A2F-FF7ABA44E26A}.Debug|x64.ActiveCfg = Debug|x64
+		{4FEA8A64-0D56-4598-9A2F-FF7ABA44E26A}.Debug|x64.Build.0 = Debug|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {B17C527D-0037-4BF6-B528-128D05F4A1F4}
+	EndGlobalSection
+EndGlobal
