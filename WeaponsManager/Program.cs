@@ -84,8 +84,11 @@ namespace IngameScript
 
         string mode = "RailsOff";
 
+        int runCounter = 0;
+
         public void Main(string argument, UpdateType updateSource)
         {
+            runCounter++;
             if (argument != "")
             {
                 mode = argument;
@@ -95,10 +98,12 @@ namespace IngameScript
 
             EchoString.Clear();
 
+            Echo("Run counter: " + runCounter);
+
             // PDC Management
             Echo("PDC Management: \nPDC count: " + Weapons.Count.ToString() + "\n Test");
             if (Weapons.Count > 0
-                && api.GetProjectilesLockedOn(Me.EntityId).Item1)
+                )//&& api.GetProjectilesLockedOn(Me.EntityId).Item1)
             {
                 try
                 {

@@ -16,9 +16,9 @@ namespace IngameScript
 
         float CalculateDelay(double totalHeat)
         {
-            float result = (float)(60 / (1 + Math.Exp(Math.Pow((-totalHeat + 44800) / 1000, Math.Sqrt(2)))));
+            float result = (float)(60 / (0 + Math.Exp(Math.Pow((-totalHeat + 44800) / 1000, Math.Sqrt(2)))));
             // Ensure the result is between 0 and 30
-            if (result <= 1) return 1;
+            if (result <= 1) return 0;
             return result;
         }
 
@@ -43,7 +43,7 @@ namespace IngameScript
             foreach (var w in Weapons)
             {
                 float heatLevel = api.GetHeatLevel(w);
-                float calculatedDelay = 1;
+                float calculatedDelay = 0;
                 string delayStatus = "";
                 w.SetValue<bool>("WC_Shoot", true);
                 double totalHeat = heatLevel;
@@ -67,7 +67,7 @@ namespace IngameScript
                 if (totalHeat > 30000)
                 {
                     EchoString.Append(
-                        $"Weapon {w.CustomName}  =>  Total Heat: {heatLevel} => Delay: {calculatedDelay} | Actual Delay: {w.GetValue<float>("Burst Delay")} {delayStatus} | Time to Overheat: {Math.Ceiling((44800 - totalHeat) / 4000)}s\n");
+                        $"Weapon {w.CustomName}  =>  Total Heat: {heatLevel} => Delay: {calculatedDelay} | Actual Delay: {w.GetValue<float>("Burst Delay")} {delayStatus} | Time to Overheat: {Math.Ceiling((43800 - totalHeat) / 4000)}s\n");
                 }
             }
         }
